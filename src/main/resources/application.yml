@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: fantasyiq
+  profiles:
+    active: local
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+  error:
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# Feature-team-owned config: external provider settings.
+# Real values (keys) come from env vars — never commit real secrets.
+fantasyiq:
+  providers:
+    espn:
+      base-url: https://site.api.espn.com/apis/site/v2/sports/football/nfl
+      core-base-url: https://sports.core.api.espn.com/v2/sports/football/leagues/nfl
+    odds-api:
+      base-url: https://api.the-odds-api.com/v4
+      api-key: ${ODDS_API_KEY:}
+    openweather:
+      base-url: https://api.openweathermap.org/data/2.5
+      api-key: ${OPENWEATHER_API_KEY:}
+    sleeper:
+      base-url: https://api.sleeper.app/v1
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-every-real-environment-this-is-local-only}
+    access-token-ttl-minutes: 15
+    refresh-token-ttl-days: 30

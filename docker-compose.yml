@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fantasyiq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fantasyiq
+      POSTGRES_USER: fantasyiq
+      POSTGRES_PASSWORD: fantasyiq
+    ports:
+      - "5432:5432"
+    volumes:
+      - fantasyiq-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fantasyiq -d fantasyiq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: fantasyiq-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional local observability stack (Phase 6) — commented out until you get there.
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   ports: ["9090:9090"]
+  #   volumes:
+  #     - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   ports: ["3000:3000"]
+
+volumes:
+  fantasyiq-postgres-data:
