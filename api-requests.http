@@ -1,0 +1,95 @@
+### FantasyIQ manual API testing collection
+### Run `docker compose up -d` + `./gradlew bootRun` first.
+### In IntelliJ, run requests top to bottom with the "Run All Requests" gutter action,
+### or click the individual green arrows -- {{accessToken}}/{{refreshToken}} are
+### captured automatically from prior responses via the client.global scripts below.
+
+@baseUrl = http://localhost:8080
+
+### Health check
+GET {{baseUrl}}/actuator/health
+
+### Register
+# @name register
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "coach@fantasyiq.dev",
+  "password": "correct-horse-battery",
+  "displayName": "Coach"
+}
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+    client.global.set("refreshToken", response.body.refreshToken);
+%}
+
+### Register again with the same email -- expect 409
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "coach@fantasyiq.dev",
+  "password": "correct-horse-battery",
+  "displayName": "Coach"
+}
+
+### Login
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "coach@fantasyiq.dev",
+  "password": "correct-horse-battery"
+}
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+    client.global.set("refreshToken", response.body.refreshToken);
+%}
+
+### Login with wrong password -- expect 401
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "coach@fantasyiq.dev",
+  "password": "wrong-password"
+}
+
+### Refresh -- rotates the token pair
+# @name refresh
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+> {%
+    client.global.set("oldRefreshToken", client.global.get("refreshToken"));
+    client.global.set("accessToken", response.body.accessToken);
+    client.global.set("refreshToken", response.body.refreshToken);
+%}
+
+### Replay the old (now rotated-out) refresh token -- expect 401
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{oldRefreshToken}}"
+}
+
+### Trigger player ingestion from ESPN (requires auth; pulls all 32 rosters, can take a while)
+POST {{baseUrl}}/api/players/ingest
+Authorization: Bearer {{accessToken}}
+
+### Search players by (partial) name
+GET {{baseUrl}}/api/players/search?q=mahomes
+Authorization: Bearer {{accessToken}}
+
+### Get a player by id -- replace with a real id from the search response above
+GET {{baseUrl}}/api/players/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{accessToken}}

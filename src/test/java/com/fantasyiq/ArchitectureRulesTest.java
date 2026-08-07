@@ -29,12 +29,9 @@ class ArchitectureRulesTest {
 
     @Test
     void ingestionMustNotDependOnApiLayer() {
-        // allowEmptyShould: ingestion has no concrete classes yet (Phase 2) --
-        // only package-info.java. Remove once real classes land there.
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.fantasyiq.ingestion..")
-                .should().dependOnClassesThat().resideInAPackage("com.fantasyiq.api..")
-                .allowEmptyShould(true);
+                .should().dependOnClassesThat().resideInAPackage("com.fantasyiq.api..");
         rule.check(classes);
     }
 
@@ -53,15 +50,12 @@ class ArchitectureRulesTest {
     void domainMustNotDependOnIngestionAnalyticsOrApi() {
         // Domain (Player/Team/Game entities + repos) is the innermost layer --
         // everything else depends on it, it depends on nothing feature-specific.
-        // allowEmptyShould: domain has no concrete classes yet (Phase 1 player
-        // work) -- only package-info.java. Remove once real classes land there.
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.fantasyiq.domain..")
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "com.fantasyiq.ingestion..",
                         "com.fantasyiq.analytics..",
-                        "com.fantasyiq.api..")
-                .allowEmptyShould(true);
+                        "com.fantasyiq.api..");
         rule.check(classes);
     }
 
