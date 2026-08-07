@@ -1,6 +1,8 @@
 package com.fantasyiq.ingestion.stats;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -74,5 +76,79 @@ final class EspnResponseMapper {
             return null;
         }
         return LocalDate.parse(dateOfBirth.substring(0, 10));
+    }
+
+    /**
+     * Regular season only (seasonType.type == 2) -- preseason/postseason
+     * games aren't relevant to weekly fantasy scoring, so they're filtered
+     * out here rather than carried into the games table.
+     */
+    static List<RawGame> toRawGames(EspnScheduleResponse response) {
+        if (response == null || response.events() == null) {
+            return List.of();
+        }
+        return response.events().stream()
+                .filter(Objects::nonNull)
+                .filter(EspnResponseMapper::isRegularSeason)
+                .map(EspnResponseMapper::toRawGame)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static boolean isRegularSeason(EspnEvent event) {
+        return event.seasonType() != null && Integer.valueOf(2).equals(event.seasonType().type());
+    }
+
+    private static RawGame toRawGame(EspnEvent event) {
+        if (event.competitions() == null || event.competitions().isEmpty()) {
+            return null;
+        }
+        EspnCompetition competition = event.competitions().get(0);
+        if (competition.competitors() == null) {
+            return null;
+        }
+
+        String homeTeamId = findCompetitorTeamId(competition, "home");
+        String awayTeamId = findCompetitorTeamId(competition, "away");
+        if (homeTeamId == null || awayTeamId == null) {
+            return null;
+        }
+
+        Integer season = event.season() != null ? event.season().year() : null;
+        Integer week = event.week() != null ? event.week().number() : null;
+        String venue = competition.venue() != null ? competition.venue().fullName() : null;
+
+        return new RawGame(event.id(), season, week, homeTeamId, awayTeamId,
+                parseKickoff(event.date()), venue, mapStatus(competition.status()));
+    }
+
+    private static String findCompetitorTeamId(EspnCompetition competition, String homeAway) {
+        return competition.competitors().stream()
+                .filter(Objects::nonNull)
+                .filter(competitor -> homeAway.equals(competitor.homeAway()))
+                .map(EspnCompetitor::team)
+                .filter(Objects::nonNull)
+                .map(EspnTeam::id)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String mapStatus(EspnCompetitionStatus status) {
+        String state = status != null && status.type() != null ? status.type().state() : null;
+        if (state == null) {
+            return "SCHEDULED";
+        }
+        return switch (state) {
+            case "in" -> "IN_PROGRESS";
+            case "post" -> "FINAL";
+            default -> "SCHEDULED";
+        };
+    }
+
+    private static Instant parseKickoff(String date) {
+        if (date == null) {
+            return null;
+        }
+        return OffsetDateTime.parse(date).toInstant();
     }
 }

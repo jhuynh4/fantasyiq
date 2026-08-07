@@ -33,4 +33,13 @@ public class EspnStatsProvider implements StatsProvider {
                 .body(EspnRosterResponse.class);
         return EspnResponseMapper.toRawAthletes(response);
     }
+
+    @Override
+    public List<RawGame> fetchSchedule(String teamExternalId) {
+        EspnScheduleResponse response = restClient.get()
+                .uri(baseUrl + "/teams/{id}/schedule", teamExternalId)
+                .retrieve()
+                .body(EspnScheduleResponse.class);
+        return EspnResponseMapper.toRawGames(response);
+    }
 }
