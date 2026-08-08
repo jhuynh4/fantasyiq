@@ -93,3 +93,28 @@ record EspnCompetitionStatus(EspnStatusType type) {
 @JsonIgnoreProperties(ignoreUnknown = true)
 record EspnStatusType(String state) {
 }
+
+/**
+ * ESPN's gamelog response is column-oriented, not field-oriented like
+ * everything else: top-level "names" defines what each positional slot in
+ * an event's "stats" array means, and the SET of names varies by position
+ * (a QB's names differ entirely from a WR's). The actual per-game stat
+ * lines are nested under seasonTypes[].categories[].events[] -- NOT the
+ * top-level "events" map, which only carries descriptive metadata
+ * (week/opponent/date) with no stats at all; easy to miss on a first read.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnGameLogResponse(List<String> names, List<EspnGameLogSeasonType> seasonTypes) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnGameLogSeasonType(List<EspnGameLogCategory> categories) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnGameLogCategory(List<EspnGameLogEvent> events) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnGameLogEvent(String eventId, List<String> stats) {
+}

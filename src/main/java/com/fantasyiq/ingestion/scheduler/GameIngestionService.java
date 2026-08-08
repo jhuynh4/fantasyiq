@@ -37,9 +37,12 @@ public class GameIngestionService {
      * to skip games already seen this run.
      */
     public int ingestSchedules() {
+        return ingestSchedules(currentNflSeason());
+    }
+
+    public int ingestSchedules(int season) {
         Map<String, Team> teamsByEspnId = resolveTeams();
         Set<String> processedGameIds = new HashSet<>();
-        int season = currentNflSeason();
 
         int gamesIngested = 0;
         for (Map.Entry<String, Team> entry : teamsByEspnId.entrySet()) {

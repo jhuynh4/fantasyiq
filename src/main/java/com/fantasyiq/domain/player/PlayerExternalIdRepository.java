@@ -7,4 +7,6 @@ import java.util.Optional;
 public interface PlayerExternalIdRepository extends JpaRepository<PlayerExternalId, Long> {
 
     Optional<PlayerExternalId> findBySourceAndExternalId(String source, String externalId);
+
+    Optional<PlayerExternalId> findByPlayerAndSource(Player player, String source);
 }

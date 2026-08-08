@@ -94,12 +94,23 @@ Authorization: Bearer {{accessToken}}
 GET {{baseUrl}}/api/players/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{accessToken}}
 
-### Trigger schedule ingestion from ESPN (requires auth; regular-season games only --
-### may return 0 games ingested if ESPN hasn't published the regular season slate yet)
+### Trigger schedule ingestion from ESPN for the CURRENT season (requires auth;
+### regular-season games only -- may return 0 if ESPN hasn't published the slate yet)
 POST {{baseUrl}}/api/games/ingest
+Authorization: Bearer {{accessToken}}
+
+### Trigger schedule ingestion for a SPECIFIC season (e.g. last season's completed
+### games, so player-game-stats ingestion below has something real to link against)
+POST {{baseUrl}}/api/games/ingest?season=2025
 Authorization: Bearer {{accessToken}}
 
 ### Trigger injury ingestion from ESPN (requires auth; run /api/players/ingest FIRST --
 ### reports for players not yet ingested are silently skipped, not an error)
 POST {{baseUrl}}/api/injuries/ingest
+Authorization: Bearer {{accessToken}}
+
+### Trigger player game-stats ingestion for a completed season (requires auth;
+### run /api/players/ingest AND /api/games/ingest?season=<year> FIRST -- per-athlete,
+### QB/RB/WR/TE only, hundreds of HTTP calls so this can take several minutes)
+POST {{baseUrl}}/api/player-game-stats/ingest?season=2025
 Authorization: Bearer {{accessToken}}

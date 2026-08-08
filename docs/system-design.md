@@ -200,20 +200,27 @@ games (
 )
 
 player_game_stats (
+  -- Scoped to QB/RB/WR/TE. K/DST use team-level ESPN endpoints, not the
+  -- per-athlete gamelog this table is populated from -- a separate future task.
   id BIGSERIAL PK,
   player_id UUID FK -> players,
   game_id UUID FK -> games,
-  snaps INT,
-  snap_pct NUMERIC(5,2),
+  snaps INT,                      -- NOT populated: confirmed absent from ESPN's free-tier gamelog data
+  snap_pct NUMERIC(5,2),          -- NOT populated, same reason
   targets INT,
   receptions INT,
   rec_yards INT,
   rush_attempts INT,
   rush_yards INT,
-  red_zone_touches INT,
-  touchdowns INT,
-  fantasy_points_ppr NUMERIC(6,2),
-  fantasy_points_standard NUMERIC(6,2),
+  red_zone_touches INT,           -- NOT populated: confirmed absent from ESPN's free-tier gamelog data
+  passing_attempts INT,           -- added: original sketch only anticipated skill-position stats
+  passing_completions INT,
+  passing_yards INT,
+  passing_touchdowns INT,
+  interceptions INT,
+  touchdowns INT,                 -- total across passing + rushing + receiving
+  fantasy_points_ppr NUMERIC(6,2),      -- computed by us; ESPN doesn't provide fantasy points
+  fantasy_points_standard NUMERIC(6,2), -- computed by us, standard scoring rules
   UNIQUE (player_id, game_id)
 )
 ```

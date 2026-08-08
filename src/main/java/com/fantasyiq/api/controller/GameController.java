@@ -5,6 +5,7 @@ import com.fantasyiq.ingestion.scheduler.GameIngestionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -18,8 +19,11 @@ public class GameController {
     }
 
     @PostMapping("/ingest")
-    public ResponseEntity<GameIngestResponse> ingest() {
-        int gamesIngested = gameIngestionService.ingestSchedules();
+    public ResponseEntity<GameIngestResponse> ingest(
+            @RequestParam(required = false) Integer season) {
+        int gamesIngested = season != null
+                ? gameIngestionService.ingestSchedules(season)
+                : gameIngestionService.ingestSchedules();
         return ResponseEntity.ok(new GameIngestResponse(gamesIngested));
     }
 }

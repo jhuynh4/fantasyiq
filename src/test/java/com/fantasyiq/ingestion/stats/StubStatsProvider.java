@@ -1,5 +1,6 @@
 package com.fantasyiq.ingestion.stats;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -36,5 +37,16 @@ public class StubStatsProvider implements StatsProvider {
         return List.of(new RawGame(
                 "555", 2026, 1, "999", "998",
                 Instant.parse("2026-09-07T17:00:00Z"), "State Farm Stadium", "SCHEDULED"));
+    }
+
+    @Override
+    public List<RawGameStats> fetchGameStats(String athleteExternalId, int season) {
+        // Matches "Test Player" (ESPN id 12345) and game external_ref "555" above
+        if (!"12345".equals(athleteExternalId)) {
+            return List.of();
+        }
+        return List.of(new RawGameStats(
+                "555", "12345", 5, 3, 45, 2, 10, null, null, null, null, null, 1,
+                new BigDecimal("10.50"), new BigDecimal("7.50")));
     }
 }
