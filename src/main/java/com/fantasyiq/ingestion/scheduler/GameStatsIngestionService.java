@@ -53,13 +53,17 @@ public class GameStatsIngestionService {
      * line for a game we don't have is skipped, not a failure, since that's
      * an ordering gap between two jobs, not corrupt data.
      */
-    public int ingestGameStats(int season) {
+    public IngestGameStatsResult ingestGameStats(int season) {
+        int playersConsidered = 0;
+        int playersWithEspnId = 0;
+        int rawStatLinesFetched = 0;
         int statLinesIngested = 0;
 
         for (Player player : playerRepository.findAll()) {
             if (!SUPPORTED_POSITIONS.contains(player.getPosition())) {
                 continue;
             }
+            playersConsidered++;
 
             Optional<String> espnAthleteId = playerExternalIdRepository
                     .findByPlayerAndSource(player, ESPN_SOURCE)
@@ -67,8 +71,10 @@ public class GameStatsIngestionService {
             if (espnAthleteId.isEmpty()) {
                 continue;
             }
+            playersWithEspnId++;
 
             for (RawGameStats rawStats : statsProvider.fetchGameStats(espnAthleteId.get(), season)) {
+                rawStatLinesFetched++;
                 Optional<Game> game = gameRepository.findByExternalRef(rawStats.espnEventId());
                 if (game.isEmpty()) {
                     continue;
@@ -84,6 +90,10 @@ public class GameStatsIngestionService {
             }
         }
 
-        return statLinesIngested;
+        return new IngestGameStatsResult(playersConsidered, playersWithEspnId, rawStatLinesFetched, statLinesIngested);
+    }
+
+    public record IngestGameStatsResult(int playersConsidered, int playersWithEspnId, int rawStatLinesFetched,
+                                         int statLinesIngested) {
     }
 }

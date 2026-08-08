@@ -56,9 +56,9 @@ class GameStatsIngestionServiceIT extends IntegrationTestBase {
         playerIngestionService.ingestRosters(); // seeds "Test Player" (WR, ESPN id 12345)
         gameIngestionService.ingestSchedules(2026); // seeds game external_ref "555"
 
-        int statLinesIngested = gameStatsIngestionService.ingestGameStats(2025);
+        GameStatsIngestionService.IngestGameStatsResult result = gameStatsIngestionService.ingestGameStats(2025);
 
-        assertThat(statLinesIngested).isEqualTo(1);
+        assertThat(result.statLinesIngested()).isEqualTo(1);
         assertThat(playerGameStatsRepository.count()).isEqualTo(1);
     }
 
@@ -81,9 +81,9 @@ class GameStatsIngestionServiceIT extends IntegrationTestBase {
         // Player exists, but the game ("555") was never ingested via schedule ingestion
         playerIngestionService.ingestRosters();
 
-        int statLinesIngested = gameStatsIngestionService.ingestGameStats(2025);
+        GameStatsIngestionService.IngestGameStatsResult result = gameStatsIngestionService.ingestGameStats(2025);
 
-        assertThat(statLinesIngested).isEqualTo(0);
+        assertThat(result.statLinesIngested()).isEqualTo(0);
         assertThat(playerGameStatsRepository.count()).isEqualTo(0);
     }
 }

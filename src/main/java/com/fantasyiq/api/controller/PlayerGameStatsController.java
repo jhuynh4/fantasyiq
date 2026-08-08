@@ -25,7 +25,9 @@ public class PlayerGameStatsController {
      */
     @PostMapping("/ingest")
     public ResponseEntity<GameStatsIngestResponse> ingest(@RequestParam int season) {
-        int statLinesIngested = gameStatsIngestionService.ingestGameStats(season);
-        return ResponseEntity.ok(new GameStatsIngestResponse(statLinesIngested));
+        GameStatsIngestionService.IngestGameStatsResult result = gameStatsIngestionService.ingestGameStats(season);
+        return ResponseEntity.ok(new GameStatsIngestResponse(
+                result.playersConsidered(), result.playersWithEspnId(),
+                result.rawStatLinesFetched(), result.statLinesIngested()));
     }
 }
