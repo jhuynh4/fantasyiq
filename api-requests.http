@@ -98,3 +98,8 @@ Authorization: Bearer {{accessToken}}
 ### may return 0 games ingested if ESPN hasn't published the regular season slate yet)
 POST {{baseUrl}}/api/games/ingest
 Authorization: Bearer {{accessToken}}
+
+### Trigger injury ingestion from ESPN (requires auth; run /api/players/ingest FIRST --
+### reports for players not yet ingested are silently skipped, not an error)
+POST {{baseUrl}}/api/injuries/ingest
+Authorization: Bearer {{accessToken}}
