@@ -1,9 +1,11 @@
 package com.fantasyiq.ingestion.scheduler;
 
 import com.fantasyiq.IntegrationTestBase;
+import com.fantasyiq.domain.game.GameRepository;
 import com.fantasyiq.domain.stats.PlayerGameStatsRepository;
 import com.fantasyiq.ingestion.stats.StatsProvider;
 import com.fantasyiq.ingestion.stats.StubStatsProvider;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -31,6 +33,23 @@ class GameStatsIngestionServiceIT extends IntegrationTestBase {
     private GameStatsIngestionService gameStatsIngestionService;
     @Autowired
     private PlayerGameStatsRepository playerGameStatsRepository;
+    @Autowired
+    private GameRepository gameRepository;
+
+    /**
+     * Test methods in this class share one Postgres instance with no
+     * rollback between them (see IntegrationTestBase), and JUnit doesn't
+     * guarantee method execution order. skipsStatLinesForGamesNotYetIngested
+     * specifically depends on game "555" NOT existing yet -- without this
+     * cleanup, running after a test that already created it (e.g.
+     * ingestsStatsForAKnownPlayerAndGame) would silently invalidate that
+     * assumption and fail nondeterministically depending on order.
+     */
+    @BeforeEach
+    void cleanUp() {
+        playerGameStatsRepository.deleteAll();
+        gameRepository.deleteAll();
+    }
 
     @Test
     void ingestsStatsForAKnownPlayerAndGame() {
