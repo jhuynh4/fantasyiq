@@ -33,4 +33,17 @@ public class EspnStatsProvider implements StatsProvider {
                 .body(EspnRosterResponse.class);
         return EspnResponseMapper.toRawAthletes(response);
     }
+
+    @Override
+    public List<RawGame> fetchSchedule(String teamExternalId, int season) {
+        // ESPN's schedule endpoint defaults to whatever season/type is
+        // currently happening on the calendar (e.g. preseason in August) --
+        // season + seasontype=2 must be explicit or regular-season games
+        // silently don't come back.
+        EspnScheduleResponse response = restClient.get()
+                .uri(baseUrl + "/teams/{id}/schedule?season={season}&seasontype=2", teamExternalId, season)
+                .retrieve()
+                .body(EspnScheduleResponse.class);
+        return EspnResponseMapper.toRawGames(response);
+    }
 }

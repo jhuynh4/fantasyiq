@@ -52,3 +52,44 @@ record EspnPosition(String abbreviation) {
 @JsonIgnoreProperties(ignoreUnknown = true)
 record EspnStatus(String type) {
 }
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnScheduleResponse(List<EspnEvent> events) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnEvent(String id, String date, EspnEventSeason season, EspnSeasonType seasonType,
+                  EspnWeek week, List<EspnCompetition> competitions) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnEventSeason(Integer year) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnSeasonType(Integer type, String name) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnWeek(Integer number) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnCompetition(EspnVenue venue, List<EspnCompetitor> competitors, EspnCompetitionStatus status) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnVenue(String fullName) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnCompetitor(String homeAway, EspnTeam team) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnCompetitionStatus(EspnStatusType type) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnStatusType(String state) {
+}

@@ -93,3 +93,8 @@ Authorization: Bearer {{accessToken}}
 ### Get a player by id -- replace with a real id from the search response above
 GET {{baseUrl}}/api/players/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{accessToken}}
+
+### Trigger schedule ingestion from ESPN (requires auth; regular-season games only --
+### may return 0 games ingested if ESPN hasn't published the regular season slate yet)
+POST {{baseUrl}}/api/games/ingest
+Authorization: Bearer {{accessToken}}

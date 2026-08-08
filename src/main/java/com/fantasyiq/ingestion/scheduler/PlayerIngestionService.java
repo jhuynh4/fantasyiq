@@ -2,9 +2,7 @@ package com.fantasyiq.ingestion.scheduler;
 
 import com.fantasyiq.domain.player.PlayerReconciliationService;
 import com.fantasyiq.domain.team.Team;
-import com.fantasyiq.domain.team.TeamExternalId;
-import com.fantasyiq.domain.team.TeamExternalIdRepository;
-import com.fantasyiq.domain.team.TeamRepository;
+import com.fantasyiq.domain.team.TeamReconciliationService;
 import com.fantasyiq.ingestion.stats.RawAthlete;
 import com.fantasyiq.ingestion.stats.RawTeam;
 import com.fantasyiq.ingestion.stats.StatsProvider;
@@ -17,20 +15,15 @@ import java.util.Map;
 @Service
 public class PlayerIngestionService {
 
-    private static final String ESPN_SOURCE = "ESPN";
-
     private final StatsProvider statsProvider;
-    private final TeamRepository teamRepository;
-    private final TeamExternalIdRepository teamExternalIdRepository;
+    private final TeamReconciliationService teamReconciliationService;
     private final PlayerReconciliationService playerReconciliationService;
 
     public PlayerIngestionService(StatsProvider statsProvider,
-                                   TeamRepository teamRepository,
-                                   TeamExternalIdRepository teamExternalIdRepository,
+                                   TeamReconciliationService teamReconciliationService,
                                    PlayerReconciliationService playerReconciliationService) {
         this.statsProvider = statsProvider;
-        this.teamRepository = teamRepository;
-        this.teamExternalIdRepository = teamExternalIdRepository;
+        this.teamReconciliationService = teamReconciliationService;
         this.playerReconciliationService = playerReconciliationService;
     }
 
@@ -40,7 +33,7 @@ public class PlayerIngestionService {
      * that. Each write below is its own short transaction instead.
      */
     public int ingestRosters() {
-        Map<String, Team> teamsByEspnId = resolveTeamExternalIds();
+        Map<String, Team> teamsByEspnId = resolveTeams();
 
         int playersIngested = 0;
         for (Map.Entry<String, Team> entry : teamsByEspnId.entrySet()) {
@@ -55,17 +48,11 @@ public class PlayerIngestionService {
         return playersIngested;
     }
 
-    private Map<String, Team> resolveTeamExternalIds() {
+    private Map<String, Team> resolveTeams() {
         Map<String, Team> result = new LinkedHashMap<>();
         for (RawTeam rawTeam : statsProvider.fetchTeams()) {
-            Team team = teamRepository.findByAbbreviation(rawTeam.abbreviation())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Unknown team abbreviation from ESPN: " + rawTeam.abbreviation()));
-
-            teamExternalIdRepository.findBySourceAndTeam(ESPN_SOURCE, team)
-                    .orElseGet(() -> teamExternalIdRepository.save(
-                            new TeamExternalId(team, ESPN_SOURCE, rawTeam.externalId())));
-
+            Team team = teamReconciliationService.resolveByEspnAbbreviation(
+                    rawTeam.abbreviation(), rawTeam.externalId());
             result.put(rawTeam.externalId(), team);
         }
         return result;
