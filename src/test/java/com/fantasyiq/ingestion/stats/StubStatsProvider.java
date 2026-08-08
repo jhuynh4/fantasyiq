@@ -30,7 +30,7 @@ public class StubStatsProvider implements StatsProvider {
     }
 
     @Override
-    public List<RawGame> fetchSchedule(String teamExternalId) {
+    public List<RawGame> fetchSchedule(String teamExternalId, int season) {
         // Same game returned for both teams' schedule fetch, exactly like ESPN's
         // real behavior -- exercises the dedup-by-external_ref path.
         return List.of(new RawGame(

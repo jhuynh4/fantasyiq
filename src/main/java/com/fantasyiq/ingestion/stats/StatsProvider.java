@@ -13,5 +13,5 @@ public interface StatsProvider {
 
     List<RawAthlete> fetchRoster(String teamExternalId);
 
-    List<RawGame> fetchSchedule(String teamExternalId);
+    List<RawGame> fetchSchedule(String teamExternalId, int season);
 }

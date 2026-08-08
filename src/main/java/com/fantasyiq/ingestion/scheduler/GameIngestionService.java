@@ -8,6 +8,7 @@ import com.fantasyiq.ingestion.stats.RawTeam;
 import com.fantasyiq.ingestion.stats.StatsProvider;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -38,10 +39,11 @@ public class GameIngestionService {
     public int ingestSchedules() {
         Map<String, Team> teamsByEspnId = resolveTeams();
         Set<String> processedGameIds = new HashSet<>();
+        int season = currentNflSeason();
 
         int gamesIngested = 0;
         for (Map.Entry<String, Team> entry : teamsByEspnId.entrySet()) {
-            for (RawGame rawGame : statsProvider.fetchSchedule(entry.getKey())) {
+            for (RawGame rawGame : statsProvider.fetchSchedule(entry.getKey(), season)) {
                 Team homeTeam = teamReconciliationService.findByEspnExternalId(rawGame.homeTeamExternalId())
                         .orElseThrow(() -> new IllegalStateException(
                                 "Unknown ESPN team id for home team: " + rawGame.homeTeamExternalId()));
@@ -59,6 +61,16 @@ public class GameIngestionService {
             }
         }
         return gamesIngested;
+    }
+
+    /**
+     * NFL seasons are named for the year they start in (the "2026 season"
+     * runs Sept 2026 - Feb 2027). Jan/Feb still belong to the prior season
+     * (playoffs/aftermath), so only roll over to the new year from March on.
+     */
+    private static int currentNflSeason() {
+        LocalDate today = LocalDate.now();
+        return today.getMonthValue() <= 2 ? today.getYear() - 1 : today.getYear();
     }
 
     private Map<String, Team> resolveTeams() {
