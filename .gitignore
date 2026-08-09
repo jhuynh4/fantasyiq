@@ -11,6 +11,9 @@ build/
 .vscode/
 out/
 
+# Local tooling
+.claude/
+
 # Env / secrets
 .env
 

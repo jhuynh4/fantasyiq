@@ -2,6 +2,7 @@ package com.fantasyiq.ingestion.stats;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -147,5 +148,63 @@ class EspnResponseMapperTest {
                         ),
                         status)));
         return EspnResponseMapper.toRawGames(new EspnScheduleResponse(List.of(event))).get(0).status();
+    }
+
+    @Test
+    void mapsQbGameLogUsingNameIndexLookup() {
+        // Real 2025 data: J.J. McCarthy vs CHI, week 1 (athlete 4433970, event 401772968)
+        List<String> qbNames = List.of(
+                "completions", "passingAttempts", "passingYards", "completionPct", "yardsPerPassAttempt",
+                "passingTouchdowns", "interceptions", "longPassing", "sacks", "QBRating", "adjQBR",
+                "rushingAttempts", "rushingYards", "yardsPerRushAttempt", "rushingTouchdowns");
+        List<String> qbStats = List.of(
+                "14", "23", "182", "60.9", "7.9", "0", "0", "26", "0", "85.8", "68.5", "2", "7", "3.5", "0");
+        EspnGameLogResponse response = new EspnGameLogResponse(qbNames, List.of(
+                new EspnGameLogSeasonType(List.of(
+                        new EspnGameLogCategory(List.of(
+                                new EspnGameLogEvent("401772968", qbStats)))))));
+
+        List<RawGameStats> results = EspnResponseMapper.toRawGameStats(response, "4433970");
+
+        assertThat(results).containsExactly(new RawGameStats(
+                "401772968", "4433970",
+                null, null, null,             // no receiving stats in a QB's names -- correctly absent
+                2, 7,                          // rushAttempts, rushYards
+                23, 14, 182, 0, 0,             // passingAttempts, completions, yards, TDs, INTs
+                0,                             // total touchdowns (0 passing + 0 rushing + 0 receiving)
+                new BigDecimal("7.98"), new BigDecimal("7.98")));
+    }
+
+    @Test
+    void mapsSkillPositionGameLogUsingNameIndexLookup() {
+        // Real names order (Jordan Addison, WR); stats values are a representative
+        // synthetic line since only the column names were captured live for this athlete.
+        List<String> wrNames = List.of(
+                "receptions", "receivingTargets", "receivingYards", "yardsPerReception", "receivingTouchdowns",
+                "longReception", "rushingAttempts", "rushingYards", "yardsPerRushAttempt", "longRushing",
+                "rushingTouchdowns", "fumbles", "fumblesLost", "fumblesForced", "kicksBlocked");
+        List<String> wrStats = List.of(
+                "6", "9", "85", "14.2", "1", "32", "1", "5", "5.0", "5", "0", "0", "0", "0", "0");
+        EspnGameLogResponse response = new EspnGameLogResponse(wrNames, List.of(
+                new EspnGameLogSeasonType(List.of(
+                        new EspnGameLogCategory(List.of(
+                                new EspnGameLogEvent("401700001", wrStats)))))));
+
+        List<RawGameStats> results = EspnResponseMapper.toRawGameStats(response, "4429205");
+
+        assertThat(results).containsExactly(new RawGameStats(
+                "401700001", "4429205",
+                9, 6, 85,                      // targets, receptions, recYards
+                1, 5,                          // rushAttempts, rushYards
+                null, null, null, null, null,  // no passing stats in a WR's names -- correctly absent
+                1,                              // total touchdowns (1 receiving)
+                new BigDecimal("21.00"), new BigDecimal("15.00")));
+    }
+
+    @Test
+    void toRawGameStatsToleratesMissingNesting() {
+        assertThat(EspnResponseMapper.toRawGameStats(null, "1")).isEmpty();
+        assertThat(EspnResponseMapper.toRawGameStats(new EspnGameLogResponse(List.of(), null), "1")).isEmpty();
+        assertThat(EspnResponseMapper.toRawGameStats(new EspnGameLogResponse(List.of(), List.of()), "1")).isEmpty();
     }
 }

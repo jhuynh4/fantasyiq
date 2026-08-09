@@ -10,10 +10,12 @@ public class EspnStatsProvider implements StatsProvider {
 
     private final RestClient restClient;
     private final String baseUrl;
+    private final String webBaseUrl;
 
     public EspnStatsProvider(RestClient.Builder restClientBuilder, EspnProperties espnProperties) {
         this.restClient = restClientBuilder.build();
         this.baseUrl = espnProperties.baseUrl();
+        this.webBaseUrl = espnProperties.webBaseUrl();
     }
 
     @Override
@@ -45,5 +47,14 @@ public class EspnStatsProvider implements StatsProvider {
                 .retrieve()
                 .body(EspnScheduleResponse.class);
         return EspnResponseMapper.toRawGames(response);
+    }
+
+    @Override
+    public List<RawGameStats> fetchGameStats(String athleteExternalId, int season) {
+        EspnGameLogResponse response = restClient.get()
+                .uri(webBaseUrl + "/athletes/{id}/gamelog?season={season}", athleteExternalId, season)
+                .retrieve()
+                .body(EspnGameLogResponse.class);
+        return EspnResponseMapper.toRawGameStats(response, athleteExternalId);
     }
 }

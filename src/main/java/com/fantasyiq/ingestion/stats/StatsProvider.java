@@ -3,9 +3,7 @@ package com.fantasyiq.ingestion.stats;
 import java.util.List;
 
 /**
- * Adapter interface for a roster/schedule data vendor. Box-score methods
- * (fetchGameStats) land later in Phase 2 once player_game_stats ingestion
- * is actually built.
+ * Adapter interface for a roster/schedule/box-score data vendor.
  */
 public interface StatsProvider {
 
@@ -14,4 +12,6 @@ public interface StatsProvider {
     List<RawAthlete> fetchRoster(String teamExternalId);
 
     List<RawGame> fetchSchedule(String teamExternalId, int season);
+
+    List<RawGameStats> fetchGameStats(String athleteExternalId, int season);
 }

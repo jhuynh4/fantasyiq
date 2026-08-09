@@ -28,6 +28,7 @@ fantasyiq:
     espn:
       base-url: https://site.api.espn.com/apis/site/v2/sports/football/nfl
       core-base-url: https://sports.core.api.espn.com/v2/sports/football/leagues/nfl
+      web-base-url: https://site.web.api.espn.com/apis/common/v3/sports/football/nfl
     odds-api:
       base-url: https://api.the-odds-api.com/v4
       api-key: ${ODDS_API_KEY:}

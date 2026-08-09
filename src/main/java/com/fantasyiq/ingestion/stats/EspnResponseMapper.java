@@ -1,5 +1,6 @@
 package com.fantasyiq.ingestion.stats;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -150,5 +151,76 @@ final class EspnResponseMapper {
             return null;
         }
         return OffsetDateTime.parse(date).toInstant();
+    }
+
+    /**
+     * ESPN's gamelog is column-oriented: "names" says what each index in an
+     * event's "stats" array means, and the set of names varies by position
+     * (a QB has no "receptions", a WR has no "passingYards"). Looking values
+     * up by name via indexOf handles that generically -- a stat simply not
+     * being in "names" for this position naturally yields null, with no
+     * position-specific branching needed.
+     */
+    static List<RawGameStats> toRawGameStats(EspnGameLogResponse response, String espnAthleteId) {
+        if (response == null || response.names() == null || response.seasonTypes() == null) {
+            return List.of();
+        }
+        List<String> names = response.names();
+        return response.seasonTypes().stream()
+                .filter(Objects::nonNull)
+                .flatMap(seasonType -> seasonType.categories() == null
+                        ? Stream.<EspnGameLogCategory>empty() : seasonType.categories().stream())
+                .filter(Objects::nonNull)
+                .flatMap(category -> category.events() == null
+                        ? Stream.<EspnGameLogEvent>empty() : category.events().stream())
+                .filter(Objects::nonNull)
+                .filter(event -> event.stats() != null)
+                .map(event -> toRawGameStats(names, event, espnAthleteId))
+                .toList();
+    }
+
+    private static RawGameStats toRawGameStats(List<String> names, EspnGameLogEvent event, String espnAthleteId) {
+        List<String> stats = event.stats();
+
+        Integer passingAttempts = statValue(names, stats, "passingAttempts");
+        Integer passingCompletions = statValue(names, stats, "completions");
+        Integer passingYards = statValue(names, stats, "passingYards");
+        Integer passingTouchdowns = statValue(names, stats, "passingTouchdowns");
+        Integer interceptions = statValue(names, stats, "interceptions");
+        Integer rushAttempts = statValue(names, stats, "rushingAttempts");
+        Integer rushYards = statValue(names, stats, "rushingYards");
+        Integer rushingTouchdowns = statValue(names, stats, "rushingTouchdowns");
+        Integer targets = statValue(names, stats, "receivingTargets");
+        Integer receptions = statValue(names, stats, "receptions");
+        Integer recYards = statValue(names, stats, "receivingYards");
+        Integer receivingTouchdowns = statValue(names, stats, "receivingTouchdowns");
+        Integer fumblesLost = statValue(names, stats, "fumblesLost");
+
+        int totalTouchdowns = nvl(passingTouchdowns) + nvl(rushingTouchdowns) + nvl(receivingTouchdowns);
+
+        BigDecimal pprPoints = FantasyPointsCalculator.calculate(true, passingYards, passingTouchdowns,
+                interceptions, rushYards, rushingTouchdowns, receptions, recYards, receivingTouchdowns, fumblesLost);
+        BigDecimal standardPoints = FantasyPointsCalculator.calculate(false, passingYards, passingTouchdowns,
+                interceptions, rushYards, rushingTouchdowns, receptions, recYards, receivingTouchdowns, fumblesLost);
+
+        return new RawGameStats(event.eventId(), espnAthleteId, targets, receptions, recYards, rushAttempts,
+                rushYards, passingAttempts, passingCompletions, passingYards, passingTouchdowns, interceptions,
+                totalTouchdowns, pprPoints, standardPoints);
+    }
+
+    private static Integer statValue(List<String> names, List<String> stats, String statName) {
+        int index = names.indexOf(statName);
+        if (index < 0 || index >= stats.size()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(stats.get(index).replace(",", "").trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static int nvl(Integer value) {
+        return value != null ? value : 0;
     }
 }
