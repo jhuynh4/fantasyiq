@@ -27,7 +27,7 @@ public class PlayerGameStatsController {
     public ResponseEntity<GameStatsIngestResponse> ingest(@RequestParam int season) {
         GameStatsIngestionService.IngestGameStatsResult result = gameStatsIngestionService.ingestGameStats(season);
         return ResponseEntity.ok(new GameStatsIngestResponse(
-                result.playersConsidered(), result.playersWithEspnId(),
-                result.rawStatLinesFetched(), result.statLinesIngested()));
+                result.playersConsidered(), result.playersWithEspnId(), result.rawStatLinesFetched(),
+                result.statLinesIngested(), result.sampleUnmatchedEventIds(), result.sampleStoredExternalRefs()));
     }
 }

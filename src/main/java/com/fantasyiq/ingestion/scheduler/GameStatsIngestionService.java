@@ -11,6 +11,7 @@ import com.fantasyiq.ingestion.stats.RawGameStats;
 import com.fantasyiq.ingestion.stats.StatsProvider;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -58,6 +59,9 @@ public class GameStatsIngestionService {
         int playersWithEspnId = 0;
         int rawStatLinesFetched = 0;
         int statLinesIngested = 0;
+        Set<String> sampleUnmatchedEventIds = new LinkedHashSet<>();
+        Set<String> sampleStoredExternalRefs = new LinkedHashSet<>();
+        gameRepository.findAll().stream().limit(5).forEach(g -> sampleStoredExternalRefs.add(g.getExternalRef()));
 
         for (Player player : playerRepository.findAll()) {
             if (!SUPPORTED_POSITIONS.contains(player.getPosition())) {
@@ -77,6 +81,9 @@ public class GameStatsIngestionService {
                 rawStatLinesFetched++;
                 Optional<Game> game = gameRepository.findByExternalRef(rawStats.espnEventId());
                 if (game.isEmpty()) {
+                    if (sampleUnmatchedEventIds.size() < 5) {
+                        sampleUnmatchedEventIds.add(rawStats.espnEventId());
+                    }
                     continue;
                 }
 
@@ -90,10 +97,12 @@ public class GameStatsIngestionService {
             }
         }
 
-        return new IngestGameStatsResult(playersConsidered, playersWithEspnId, rawStatLinesFetched, statLinesIngested);
+        return new IngestGameStatsResult(playersConsidered, playersWithEspnId, rawStatLinesFetched,
+                statLinesIngested, sampleUnmatchedEventIds, sampleStoredExternalRefs);
     }
 
     public record IngestGameStatsResult(int playersConsidered, int playersWithEspnId, int rawStatLinesFetched,
-                                         int statLinesIngested) {
+                                         int statLinesIngested, Set<String> sampleUnmatchedEventIds,
+                                         Set<String> sampleStoredExternalRefs) {
     }
 }
