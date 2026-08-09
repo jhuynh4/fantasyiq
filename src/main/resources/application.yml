@@ -48,11 +48,6 @@ resilience4j:
       espnApi:
         max-attempts: 3
         wait-duration: 500ms
-        # Only retry transient failures -- retrying a 4xx (bad request, not
-        # found) just wastes time re-asking the same broken question.
-        retry-exceptions:
-          - org.springframework.web.client.ResourceAccessException
-          - org.springframework.web.client.HttpServerErrorException
   circuitbreaker:
     instances:
       espnApi:
