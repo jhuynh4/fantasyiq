@@ -10,3 +10,19 @@ spring:
 logging:
   level:
     com.fantasyiq: INFO
+
+# Fast retry/circuit-breaker timings so contract tests exercising failure
+# paths (EspnStatsProviderContractTest) don't spend real wall-clock time
+# waiting out production-sized backoffs.
+resilience4j:
+  retry:
+    instances:
+      espnApi:
+        max-attempts: 3
+        wait-duration: 10ms
+  circuitbreaker:
+    instances:
+      espnApi:
+        sliding-window-size: 4
+        minimum-number-of-calls: 4
+        wait-duration-in-open-state: 1s

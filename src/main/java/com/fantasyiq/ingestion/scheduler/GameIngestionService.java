@@ -8,7 +8,6 @@ import com.fantasyiq.ingestion.stats.RawTeam;
 import com.fantasyiq.ingestion.stats.StatsProvider;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,16 +16,29 @@ import java.util.Set;
 @Service
 public class GameIngestionService {
 
+    private static final String SOURCE = "STATS_PROVIDER_GAMES";
+
     private final StatsProvider statsProvider;
     private final TeamReconciliationService teamReconciliationService;
     private final GameReconciliationService gameReconciliationService;
+    private final IngestionRunService ingestionRunService;
 
     public GameIngestionService(StatsProvider statsProvider,
                                  TeamReconciliationService teamReconciliationService,
-                                 GameReconciliationService gameReconciliationService) {
+                                 GameReconciliationService gameReconciliationService,
+                                 IngestionRunService ingestionRunService) {
         this.statsProvider = statsProvider;
         this.teamReconciliationService = teamReconciliationService;
         this.gameReconciliationService = gameReconciliationService;
+        this.ingestionRunService = ingestionRunService;
+    }
+
+    public int ingestSchedules() {
+        return ingestSchedules(NflSeason.current());
+    }
+
+    public int ingestSchedules(int season) {
+        return ingestionRunService.track(SOURCE, Integer::intValue, () -> doIngestSchedules(season));
     }
 
     /**
@@ -36,11 +48,7 @@ public class GameIngestionService {
      * created), so this naturally dedupes rather than needing extra logic
      * to skip games already seen this run.
      */
-    public int ingestSchedules() {
-        return ingestSchedules(currentNflSeason());
-    }
-
-    public int ingestSchedules(int season) {
+    private int doIngestSchedules(int season) {
         Map<String, Team> teamsByEspnId = resolveTeams();
         Set<String> processedGameIds = new HashSet<>();
 
@@ -64,16 +72,6 @@ public class GameIngestionService {
             }
         }
         return gamesIngested;
-    }
-
-    /**
-     * NFL seasons are named for the year they start in (the "2026 season"
-     * runs Sept 2026 - Feb 2027). Jan/Feb still belong to the prior season
-     * (playoffs/aftermath), so only roll over to the new year from March on.
-     */
-    private static int currentNflSeason() {
-        LocalDate today = LocalDate.now();
-        return today.getMonthValue() <= 2 ? today.getYear() - 1 : today.getYear();
     }
 
     private Map<String, Team> resolveTeams() {
