@@ -13,6 +13,7 @@ out/
 
 # Local tooling
 .claude/
+CLAUDE.md
 
 # Env / secrets
 .env
