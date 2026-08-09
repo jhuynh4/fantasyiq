@@ -19,6 +19,7 @@ import java.util.Optional;
 @Service
 public class InjuryIngestionService {
 
+    private static final String SOURCE = "INJURY_PROVIDER";
     private static final String ESPN_SOURCE = "ESPN";
 
     private final StatsProvider statsProvider;
@@ -26,17 +27,24 @@ public class InjuryIngestionService {
     private final TeamReconciliationService teamReconciliationService;
     private final PlayerExternalIdRepository playerExternalIdRepository;
     private final InjuryReconciliationService injuryReconciliationService;
+    private final IngestionRunService ingestionRunService;
 
     public InjuryIngestionService(StatsProvider statsProvider,
                                    InjuryProvider injuryProvider,
                                    TeamReconciliationService teamReconciliationService,
                                    PlayerExternalIdRepository playerExternalIdRepository,
-                                   InjuryReconciliationService injuryReconciliationService) {
+                                   InjuryReconciliationService injuryReconciliationService,
+                                   IngestionRunService ingestionRunService) {
         this.statsProvider = statsProvider;
         this.injuryProvider = injuryProvider;
         this.teamReconciliationService = teamReconciliationService;
         this.playerExternalIdRepository = playerExternalIdRepository;
         this.injuryReconciliationService = injuryReconciliationService;
+        this.ingestionRunService = ingestionRunService;
+    }
+
+    public int ingestInjuries() {
+        return ingestionRunService.track(SOURCE, Integer::intValue, this::doIngestInjuries);
     }
 
     /**
@@ -46,7 +54,7 @@ public class InjuryIngestionService {
      * legitimate ordering gap between two independently-triggerable jobs,
      * not a data-integrity bug.
      */
-    public int ingestInjuries() {
+    private int doIngestInjuries() {
         Map<String, Team> teamsByEspnId = resolveTeams();
 
         int reportsIngested = 0;

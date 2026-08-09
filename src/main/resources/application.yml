@@ -41,3 +41,23 @@ fantasyiq:
     secret: ${JWT_SECRET:change-me-in-every-real-environment-this-is-local-only}
     access-token-ttl-minutes: 15
     refresh-token-ttl-days: 30
+
+resilience4j:
+  retry:
+    instances:
+      espnApi:
+        max-attempts: 3
+        wait-duration: 500ms
+        # Only retry transient failures -- retrying a 4xx (bad request, not
+        # found) just wastes time re-asking the same broken question.
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+  circuitbreaker:
+    instances:
+      espnApi:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3

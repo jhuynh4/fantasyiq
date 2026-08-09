@@ -18,6 +18,7 @@ import java.util.Set;
 @Service
 public class GameStatsIngestionService {
 
+    private static final String SOURCE = "STATS_PROVIDER_GAME_STATS";
     private static final String ESPN_SOURCE = "ESPN";
 
     // ESPN's per-athlete gamelog only covers offensive skill positions;
@@ -30,17 +31,20 @@ public class GameStatsIngestionService {
     private final PlayerExternalIdRepository playerExternalIdRepository;
     private final GameRepository gameRepository;
     private final PlayerGameStatsReconciliationService playerGameStatsReconciliationService;
+    private final IngestionRunService ingestionRunService;
 
     public GameStatsIngestionService(StatsProvider statsProvider,
                                       PlayerRepository playerRepository,
                                       PlayerExternalIdRepository playerExternalIdRepository,
                                       GameRepository gameRepository,
-                                      PlayerGameStatsReconciliationService playerGameStatsReconciliationService) {
+                                      PlayerGameStatsReconciliationService playerGameStatsReconciliationService,
+                                      IngestionRunService ingestionRunService) {
         this.statsProvider = statsProvider;
         this.playerRepository = playerRepository;
         this.playerExternalIdRepository = playerExternalIdRepository;
         this.gameRepository = gameRepository;
         this.playerGameStatsReconciliationService = playerGameStatsReconciliationService;
+        this.ingestionRunService = ingestionRunService;
     }
 
     /**
@@ -55,6 +59,11 @@ public class GameStatsIngestionService {
      * an ordering gap between two jobs, not corrupt data.
      */
     public IngestGameStatsResult ingestGameStats(int season) {
+        return ingestionRunService.track(SOURCE, IngestGameStatsResult::statLinesIngested,
+                () -> doIngestGameStats(season));
+    }
+
+    private IngestGameStatsResult doIngestGameStats(int season) {
         int playersConsidered = 0;
         int playersWithEspnId = 0;
         int rawStatLinesFetched = 0;

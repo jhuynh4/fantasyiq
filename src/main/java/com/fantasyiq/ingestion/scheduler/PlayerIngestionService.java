@@ -15,16 +15,25 @@ import java.util.Map;
 @Service
 public class PlayerIngestionService {
 
+    private static final String SOURCE = "STATS_PROVIDER_PLAYERS";
+
     private final StatsProvider statsProvider;
     private final TeamReconciliationService teamReconciliationService;
     private final PlayerReconciliationService playerReconciliationService;
+    private final IngestionRunService ingestionRunService;
 
     public PlayerIngestionService(StatsProvider statsProvider,
                                    TeamReconciliationService teamReconciliationService,
-                                   PlayerReconciliationService playerReconciliationService) {
+                                   PlayerReconciliationService playerReconciliationService,
+                                   IngestionRunService ingestionRunService) {
         this.statsProvider = statsProvider;
         this.teamReconciliationService = teamReconciliationService;
         this.playerReconciliationService = playerReconciliationService;
+        this.ingestionRunService = ingestionRunService;
+    }
+
+    public int ingestRosters() {
+        return ingestionRunService.track(SOURCE, Integer::intValue, this::doIngestRosters);
     }
 
     /**
@@ -32,7 +41,7 @@ public class PlayerIngestionService {
      * calls (1 team list + 32 rosters), and a DB transaction shouldn't span
      * that. Each write below is its own short transaction instead.
      */
-    public int ingestRosters() {
+    private int doIngestRosters() {
         Map<String, Team> teamsByEspnId = resolveTeams();
 
         int playersIngested = 0;
