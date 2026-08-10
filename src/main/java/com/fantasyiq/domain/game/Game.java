@@ -86,6 +86,10 @@ public class Game {
         this.status = status;
     }
 
+    public void markDomeStatus(boolean isDome) {
+        this.isDome = isDome;
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
