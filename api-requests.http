@@ -119,3 +119,11 @@ Authorization: Bearer {{accessToken}}
 ### call -- pure aggregation, run /api/player-game-stats/ingest for the same season FIRST)
 POST {{baseUrl}}/api/defense-vs-position/compute?season=2025&week=1
 Authorization: Bearer {{accessToken}}
+
+### Trigger weather forecast ingestion for a specific week (requires auth; run
+### /api/games/ingest?season=<year> FIRST -- skips dome/fixed-roof stadiums and any
+### game whose kickoff is outside OpenWeatherMap's ~5-day forecast window. Needs
+### OPENWEATHER_API_KEY set -- returns 0 forecasts (not an error) without a real key
+### since every call trips the circuit breaker after enough failures)
+POST {{baseUrl}}/api/weather/ingest?season=2025&week=1
+Authorization: Bearer {{accessToken}}

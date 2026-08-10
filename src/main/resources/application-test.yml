@@ -20,9 +20,16 @@ resilience4j:
       espnApi:
         max-attempts: 3
         wait-duration: 10ms
+      weatherApi:
+        max-attempts: 3
+        wait-duration: 10ms
   circuitbreaker:
     instances:
       espnApi:
+        sliding-window-size: 4
+        minimum-number-of-calls: 4
+        wait-duration-in-open-state: 1s
+      weatherApi:
         sliding-window-size: 4
         minimum-number-of-calls: 4
         wait-duration-in-open-state: 1s
