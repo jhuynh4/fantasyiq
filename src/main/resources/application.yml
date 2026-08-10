@@ -51,6 +51,9 @@ resilience4j:
       weatherApi:
         max-attempts: 3
         wait-duration: 500ms
+      oddsApi:
+        max-attempts: 3
+        wait-duration: 500ms
   circuitbreaker:
     instances:
       espnApi:
@@ -60,6 +63,12 @@ resilience4j:
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 3
       weatherApi:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+      oddsApi:
         sliding-window-size: 20
         minimum-number-of-calls: 10
         failure-rate-threshold: 50

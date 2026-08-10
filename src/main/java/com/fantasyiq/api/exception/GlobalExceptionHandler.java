@@ -3,6 +3,7 @@ package com.fantasyiq.api.exception;
 import com.fantasyiq.auth.EmailAlreadyInUseException;
 import com.fantasyiq.auth.InvalidCredentialsException;
 import com.fantasyiq.auth.InvalidRefreshTokenException;
+import com.fantasyiq.ingestion.odds.OddsUnavailableException;
 import com.fantasyiq.ingestion.stats.EspnUnavailableException;
 import com.fantasyiq.ingestion.weather.WeatherUnavailableException;
 import org.springframework.http.HttpStatus;
@@ -35,7 +36,7 @@ public class GlobalExceptionHandler {
      * yet). Catching here means the response is fully formed within the
      * original request, before any second /error dispatch is needed.
      */
-    @ExceptionHandler({EspnUnavailableException.class, WeatherUnavailableException.class})
+    @ExceptionHandler({EspnUnavailableException.class, WeatherUnavailableException.class, OddsUnavailableException.class})
     public ProblemDetail handleVendorUnavailable(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
