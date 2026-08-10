@@ -3,6 +3,7 @@ package com.fantasyiq.ingestion.stats;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Minimal mirrors of ESPN's actual JSON shapes (verified against live responses
@@ -101,10 +102,19 @@ record EspnStatusType(String state) {
  * (a QB's names differ entirely from a WR's). The actual per-game stat
  * lines are nested under seasonTypes[].categories[].events[] -- NOT the
  * top-level "events" map, which only carries descriptive metadata
- * (week/opponent/date) with no stats at all; easy to miss on a first read.
+ * (week/opponent/date, keyed by event id) with no stats at all; easy to
+ * miss on a first read. That metadata map IS where the athlete's team for
+ * that specific game lives though (events[id].team.id) -- used to populate
+ * player_game_stats.team_id, since a player's roster team can change
+ * mid-season (trades) and their *current* team would be wrong for old games.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-record EspnGameLogResponse(List<String> names, List<EspnGameLogSeasonType> seasonTypes) {
+record EspnGameLogResponse(List<String> names, List<EspnGameLogSeasonType> seasonTypes,
+                            Map<String, EspnGameLogEventMeta> events) {
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record EspnGameLogEventMeta(EspnTeam team) {
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)

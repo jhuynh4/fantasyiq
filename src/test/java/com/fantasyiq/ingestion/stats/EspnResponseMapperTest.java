@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -159,15 +160,18 @@ class EspnResponseMapperTest {
                 "rushingAttempts", "rushingYards", "yardsPerRushAttempt", "rushingTouchdowns");
         List<String> qbStats = List.of(
                 "14", "23", "182", "60.9", "7.9", "0", "0", "26", "0", "85.8", "68.5", "2", "7", "3.5", "0");
+        // Real shape: top-level "events" map (keyed by event id) is where the
+        // athlete's team for that specific game lives -- team "16" is MIN.
         EspnGameLogResponse response = new EspnGameLogResponse(qbNames, List.of(
                 new EspnGameLogSeasonType(List.of(
                         new EspnGameLogCategory(List.of(
-                                new EspnGameLogEvent("401772968", qbStats)))))));
+                                new EspnGameLogEvent("401772968", qbStats)))))),
+                Map.of("401772968", new EspnGameLogEventMeta(new EspnTeam("16", "MIN", "Minnesota Vikings"))));
 
         List<RawGameStats> results = EspnResponseMapper.toRawGameStats(response, "4433970");
 
         assertThat(results).containsExactly(new RawGameStats(
-                "401772968", "4433970",
+                "401772968", "4433970", "16",
                 null, null, null,             // no receiving stats in a QB's names -- correctly absent
                 2, 7,                          // rushAttempts, rushYards
                 23, 14, 182, 0, 0,             // passingAttempts, completions, yards, TDs, INTs
@@ -185,15 +189,18 @@ class EspnResponseMapperTest {
                 "rushingTouchdowns", "fumbles", "fumblesLost", "fumblesForced", "kicksBlocked");
         List<String> wrStats = List.of(
                 "6", "9", "85", "14.2", "1", "32", "1", "5", "5.0", "5", "0", "0", "0", "0", "0");
+        // No "events" map this time -- proves a missing/absent team metadata
+        // entry is tolerated (espnTeamId comes back null) rather than failing.
         EspnGameLogResponse response = new EspnGameLogResponse(wrNames, List.of(
                 new EspnGameLogSeasonType(List.of(
                         new EspnGameLogCategory(List.of(
-                                new EspnGameLogEvent("401700001", wrStats)))))));
+                                new EspnGameLogEvent("401700001", wrStats)))))),
+                null);
 
         List<RawGameStats> results = EspnResponseMapper.toRawGameStats(response, "4429205");
 
         assertThat(results).containsExactly(new RawGameStats(
-                "401700001", "4429205",
+                "401700001", "4429205", null,
                 9, 6, 85,                      // targets, receptions, recYards
                 1, 5,                          // rushAttempts, rushYards
                 null, null, null, null, null,  // no passing stats in a WR's names -- correctly absent
@@ -204,7 +211,8 @@ class EspnResponseMapperTest {
     @Test
     void toRawGameStatsToleratesMissingNesting() {
         assertThat(EspnResponseMapper.toRawGameStats(null, "1")).isEmpty();
-        assertThat(EspnResponseMapper.toRawGameStats(new EspnGameLogResponse(List.of(), null), "1")).isEmpty();
-        assertThat(EspnResponseMapper.toRawGameStats(new EspnGameLogResponse(List.of(), List.of()), "1")).isEmpty();
+        assertThat(EspnResponseMapper.toRawGameStats(new EspnGameLogResponse(List.of(), null, null), "1")).isEmpty();
+        assertThat(EspnResponseMapper.toRawGameStats(new EspnGameLogResponse(List.of(), List.of(), null), "1"))
+                .isEmpty();
     }
 }

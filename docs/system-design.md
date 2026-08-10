@@ -205,6 +205,9 @@ player_game_stats (
   id BIGSERIAL PK,
   player_id UUID FK -> players,
   game_id UUID FK -> games,
+  team_id INT FK -> teams,        -- the player's team FOR THIS GAME (not Player.current_team,
+                                   -- which is wrong for anyone traded mid-season); nullable,
+                                   -- ESPN occasionally omits the per-event team metadata
   snaps INT,                      -- NOT populated: confirmed absent from ESPN's free-tier gamelog data
   snap_pct NUMERIC(5,2),          -- NOT populated, same reason
   targets INT,
@@ -260,13 +263,21 @@ weather_forecasts (
 )
 
 defense_vs_position_stats (
+  -- Computed, not ingested -- aggregated from player_game_stats + games
+  -- already in the DB, no external API call. Extended beyond the original
+  -- single-column sketch to track PPR/standard separately, matching how
+  -- player_game_stats already does; a single column would silently pick
+  -- one scoring format for every caller.
   id BIGSERIAL PK,
   team_id INT FK -> teams,     -- defense being measured
   season INT,
   week INT,
   position VARCHAR(4),
-  fantasy_points_allowed NUMERIC(6,2),
-  rank INT                       -- 1 = toughest matchup, 32 = easiest
+  fantasy_points_allowed_ppr NUMERIC(6,2),
+  fantasy_points_allowed_standard NUMERIC(6,2),
+  rank_ppr INT,                  -- 1 = toughest matchup, 32 = easiest
+  rank_standard INT,
+  UNIQUE (team_id, season, week, position)
 )
 ```
 

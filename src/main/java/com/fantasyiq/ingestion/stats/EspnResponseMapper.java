@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 
@@ -166,6 +167,7 @@ final class EspnResponseMapper {
             return List.of();
         }
         List<String> names = response.names();
+        Map<String, EspnGameLogEventMeta> eventMeta = response.events() != null ? response.events() : Map.of();
         return response.seasonTypes().stream()
                 .filter(Objects::nonNull)
                 .flatMap(seasonType -> seasonType.categories() == null
@@ -175,12 +177,15 @@ final class EspnResponseMapper {
                         ? Stream.<EspnGameLogEvent>empty() : category.events().stream())
                 .filter(Objects::nonNull)
                 .filter(event -> event.stats() != null)
-                .map(event -> toRawGameStats(names, event, espnAthleteId))
+                .map(event -> toRawGameStats(names, event, espnAthleteId, eventMeta))
                 .toList();
     }
 
-    private static RawGameStats toRawGameStats(List<String> names, EspnGameLogEvent event, String espnAthleteId) {
+    private static RawGameStats toRawGameStats(List<String> names, EspnGameLogEvent event, String espnAthleteId,
+                                                Map<String, EspnGameLogEventMeta> eventMeta) {
         List<String> stats = event.stats();
+        EspnGameLogEventMeta meta = eventMeta.get(event.eventId());
+        String espnTeamId = meta != null && meta.team() != null ? meta.team().id() : null;
 
         Integer passingAttempts = statValue(names, stats, "passingAttempts");
         Integer passingCompletions = statValue(names, stats, "completions");
@@ -203,9 +208,9 @@ final class EspnResponseMapper {
         BigDecimal standardPoints = FantasyPointsCalculator.calculate(false, passingYards, passingTouchdowns,
                 interceptions, rushYards, rushingTouchdowns, receptions, recYards, receivingTouchdowns, fumblesLost);
 
-        return new RawGameStats(event.eventId(), espnAthleteId, targets, receptions, recYards, rushAttempts,
-                rushYards, passingAttempts, passingCompletions, passingYards, passingTouchdowns, interceptions,
-                totalTouchdowns, pprPoints, standardPoints);
+        return new RawGameStats(event.eventId(), espnAthleteId, espnTeamId, targets, receptions, recYards,
+                rushAttempts, rushYards, passingAttempts, passingCompletions, passingYards, passingTouchdowns,
+                interceptions, totalTouchdowns, pprPoints, standardPoints);
     }
 
     private static Integer statValue(List<String> names, List<String> stats, String statName) {

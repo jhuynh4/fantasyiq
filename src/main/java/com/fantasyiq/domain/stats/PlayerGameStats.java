@@ -2,6 +2,7 @@ package com.fantasyiq.domain.stats;
 
 import com.fantasyiq.domain.game.Game;
 import com.fantasyiq.domain.player.Player;
+import com.fantasyiq.domain.team.Team;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -32,6 +33,15 @@ public class PlayerGameStats {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "game_id", nullable = false)
     private Game game;
+
+    // The player's team FOR THIS SPECIFIC GAME, not their current team --
+    // matters for anyone traded mid-season. Sourced from the gamelog
+    // response's per-event team field, not Player.currentTeam. Nullable:
+    // defensively tolerate ESPN occasionally omitting it rather than
+    // failing the whole stat line.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id")
+    private Team team;
 
     // Not populated from ESPN's free tier -- confirmed absent from real
     // gamelog responses for both QB and skill positions. Left nullable
@@ -76,21 +86,23 @@ public class PlayerGameStats {
         // JPA
     }
 
-    public PlayerGameStats(Player player, Game game, Integer targets, Integer receptions, Integer recYards,
-                            Integer rushAttempts, Integer rushYards, Integer passingAttempts,
+    public PlayerGameStats(Player player, Game game, Team team, Integer targets, Integer receptions,
+                            Integer recYards, Integer rushAttempts, Integer rushYards, Integer passingAttempts,
                             Integer passingCompletions, Integer passingYards, Integer passingTouchdowns,
                             Integer interceptions, Integer touchdowns, BigDecimal fantasyPointsPpr,
                             BigDecimal fantasyPointsStandard) {
         this.player = player;
         this.game = game;
+        this.team = team;
         applyStats(targets, receptions, recYards, rushAttempts, rushYards, passingAttempts, passingCompletions,
                 passingYards, passingTouchdowns, interceptions, touchdowns, fantasyPointsPpr, fantasyPointsStandard);
     }
 
-    public void updateFrom(Integer targets, Integer receptions, Integer recYards, Integer rushAttempts,
+    public void updateFrom(Team team, Integer targets, Integer receptions, Integer recYards, Integer rushAttempts,
                             Integer rushYards, Integer passingAttempts, Integer passingCompletions,
                             Integer passingYards, Integer passingTouchdowns, Integer interceptions,
                             Integer touchdowns, BigDecimal fantasyPointsPpr, BigDecimal fantasyPointsStandard) {
+        this.team = team;
         applyStats(targets, receptions, recYards, rushAttempts, rushYards, passingAttempts, passingCompletions,
                 passingYards, passingTouchdowns, interceptions, touchdowns, fantasyPointsPpr, fantasyPointsStandard);
     }
@@ -136,6 +148,10 @@ public class PlayerGameStats {
 
     public Game getGame() {
         return game;
+    }
+
+    public Team getTeam() {
+        return team;
     }
 
     public Integer getSnaps() {
