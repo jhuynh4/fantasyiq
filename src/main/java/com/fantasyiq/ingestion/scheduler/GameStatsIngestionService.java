@@ -7,6 +7,8 @@ import com.fantasyiq.domain.player.PlayerExternalId;
 import com.fantasyiq.domain.player.PlayerExternalIdRepository;
 import com.fantasyiq.domain.player.PlayerRepository;
 import com.fantasyiq.domain.stats.PlayerGameStatsReconciliationService;
+import com.fantasyiq.domain.team.Team;
+import com.fantasyiq.domain.team.TeamReconciliationService;
 import com.fantasyiq.ingestion.stats.RawGameStats;
 import com.fantasyiq.ingestion.stats.StatsProvider;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ public class GameStatsIngestionService {
     private final PlayerRepository playerRepository;
     private final PlayerExternalIdRepository playerExternalIdRepository;
     private final GameRepository gameRepository;
+    private final TeamReconciliationService teamReconciliationService;
     private final PlayerGameStatsReconciliationService playerGameStatsReconciliationService;
     private final IngestionRunService ingestionRunService;
 
@@ -37,12 +40,14 @@ public class GameStatsIngestionService {
                                       PlayerRepository playerRepository,
                                       PlayerExternalIdRepository playerExternalIdRepository,
                                       GameRepository gameRepository,
+                                      TeamReconciliationService teamReconciliationService,
                                       PlayerGameStatsReconciliationService playerGameStatsReconciliationService,
                                       IngestionRunService ingestionRunService) {
         this.statsProvider = statsProvider;
         this.playerRepository = playerRepository;
         this.playerExternalIdRepository = playerExternalIdRepository;
         this.gameRepository = gameRepository;
+        this.teamReconciliationService = teamReconciliationService;
         this.playerGameStatsReconciliationService = playerGameStatsReconciliationService;
         this.ingestionRunService = ingestionRunService;
     }
@@ -96,8 +101,14 @@ public class GameStatsIngestionService {
                     continue;
                 }
 
+                // Nullable by design -- ESPN occasionally omits the per-event
+                // team metadata; don't fail the whole stat line over it.
+                Team team = rawStats.espnTeamId() != null
+                        ? teamReconciliationService.findByEspnExternalId(rawStats.espnTeamId()).orElse(null)
+                        : null;
+
                 playerGameStatsReconciliationService.resolveOrCreateFromEspn(
-                        player, game.get(), rawStats.targets(), rawStats.receptions(), rawStats.recYards(),
+                        player, game.get(), team, rawStats.targets(), rawStats.receptions(), rawStats.recYards(),
                         rawStats.rushAttempts(), rawStats.rushYards(), rawStats.passingAttempts(),
                         rawStats.passingCompletions(), rawStats.passingYards(), rawStats.passingTouchdowns(),
                         rawStats.interceptions(), rawStats.touchdowns(), rawStats.fantasyPointsPpr(),

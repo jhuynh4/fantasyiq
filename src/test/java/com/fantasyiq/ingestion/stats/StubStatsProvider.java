@@ -46,7 +46,7 @@ public class StubStatsProvider implements StatsProvider {
             return List.of();
         }
         return List.of(new RawGameStats(
-                "555", "12345", 5, 3, 45, 2, 10, null, null, null, null, null, 1,
+                "555", "12345", "999", 5, 3, 45, 2, 10, null, null, null, null, null, 1,
                 new BigDecimal("10.50"), new BigDecimal("7.50")));
     }
 }

@@ -114,3 +114,8 @@ Authorization: Bearer {{accessToken}}
 ### QB/RB/WR/TE only, hundreds of HTTP calls so this can take several minutes)
 POST {{baseUrl}}/api/player-game-stats/ingest?season=2025
 Authorization: Bearer {{accessToken}}
+
+### Compute defense-vs-position stats for a specific week (requires auth; no external
+### call -- pure aggregation, run /api/player-game-stats/ingest for the same season FIRST)
+POST {{baseUrl}}/api/defense-vs-position/compute?season=2025&week=1
+Authorization: Bearer {{accessToken}}
