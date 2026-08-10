@@ -7,4 +7,6 @@ import java.util.Optional;
 public interface TeamRepository extends JpaRepository<Team, Integer> {
 
     Optional<Team> findByAbbreviation(String abbreviation);
+
+    Optional<Team> findByName(String name);
 }

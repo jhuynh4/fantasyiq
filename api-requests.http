@@ -121,9 +121,17 @@ POST {{baseUrl}}/api/defense-vs-position/compute?season=2025&week=1
 Authorization: Bearer {{accessToken}}
 
 ### Trigger weather forecast ingestion for a specific week (requires auth; run
-### /api/games/ingest?season=<year> FIRST -- skips dome/fixed-roof stadiums and any
-### game whose kickoff is outside OpenWeatherMap's ~5-day forecast window. Needs
-### OPENWEATHER_API_KEY set -- returns 0 forecasts (not an error) without a real key
-### since every call trips the circuit breaker after enough failures)
+### /api/games/ingest?season=<year> FIRST -- skips dome/fixed-roof stadiums, kickoffs
+### outside OpenWeatherMap's ~5-day forecast window, and kickoffs already in the past.
+### Needs OPENWEATHER_API_KEY set -- without a real key every call eventually returns
+### 503 once the circuit breaker trips)
 POST {{baseUrl}}/api/weather/ingest?season=2025&week=1
+Authorization: Bearer {{accessToken}}
+
+### Trigger betting-line ingestion (requires auth; no season/week params -- The Odds API
+### only exposes the current slate of upcoming games, matched against ours by team names
+### + closest kickoff. Run /api/games/ingest for the current season FIRST so there's
+### something to match against. Needs ODDS_API_KEY set -- without a real key eventually
+### returns 503 once the circuit breaker trips)
+POST {{baseUrl}}/api/odds/ingest
 Authorization: Bearer {{accessToken}}
