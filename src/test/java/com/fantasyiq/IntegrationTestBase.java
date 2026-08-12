@@ -1,5 +1,16 @@
 package com.fantasyiq;
 
+import com.fantasyiq.domain.game.GameRepository;
+import com.fantasyiq.domain.player.PlayerExternalIdRepository;
+import com.fantasyiq.domain.player.PlayerRepository;
+import com.fantasyiq.domain.recommendation.RecommendationRepository;
+import com.fantasyiq.domain.stats.BettingLineRepository;
+import com.fantasyiq.domain.stats.DefenseVsPositionStatsRepository;
+import com.fantasyiq.domain.stats.InjuryReportRepository;
+import com.fantasyiq.domain.stats.PlayerGameStatsRepository;
+import com.fantasyiq.domain.stats.WeatherForecastRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -46,5 +57,51 @@ public abstract class IntegrationTestBase {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+    }
+
+    @Autowired
+    private RecommendationRepository recommendationRepository;
+    @Autowired
+    private BettingLineRepository bettingLineRepository;
+    @Autowired
+    private WeatherForecastRepository weatherForecastRepository;
+    @Autowired
+    private InjuryReportRepository injuryReportRepository;
+    @Autowired
+    private DefenseVsPositionStatsRepository defenseVsPositionStatsRepository;
+    @Autowired
+    private PlayerGameStatsRepository playerGameStatsRepository;
+    @Autowired
+    private PlayerExternalIdRepository playerExternalIdRepository;
+    @Autowired
+    private GameRepository gameRepository;
+    @Autowired
+    private PlayerRepository playerRepository;
+
+    /**
+     * Now that POSTGRES is a genuinely shared, never-restarted container
+     * (see the class comment above), every mutable table needs a clean
+     * slate before each test method, not just the ones a given test class
+     * happens to know it personally writes to -- subclass-local @BeforeEach
+     * cleanup that only wiped its own tables was silently relying on the old,
+     * buggy per-class container restart to hide leftover rows from *other*
+     * classes. Runs before any subclass's own @BeforeEach (JUnit executes
+     * superclass lifecycle callbacks first), in FK-safe order. teams/
+     * stadium_locations/team_external_ids/player_external_ids and auth
+     * tables are deliberately left alone -- seeded/reconciled data, not
+     * per-test fixtures, and reconciliation upserts are already idempotent
+     * across runs.
+     */
+    @BeforeEach
+    void wipeMutableTablesBeforeEachTest() {
+        recommendationRepository.deleteAll();
+        bettingLineRepository.deleteAll();
+        weatherForecastRepository.deleteAll();
+        injuryReportRepository.deleteAll();
+        defenseVsPositionStatsRepository.deleteAll();
+        playerGameStatsRepository.deleteAll();
+        playerExternalIdRepository.deleteAll();
+        gameRepository.deleteAll();
+        playerRepository.deleteAll();
     }
 }
