@@ -162,6 +162,8 @@ The weighted-linear approach also has real engineering benefits that map to your
 
 Waiver scoring above is one *specialization* of a general factor-scoring engine reused across features. Here's the shared core.
 
+**Implementation note (added once Phase 3 actually started):** this section (and the red-zone-based signal in Part 2's waiver algorithm) was written assuming a richer data source than what this project actually ended up ingesting. Our real `player_game_stats.red_zone_touches` is always `NULL` — ESPN's free-tier gamelog endpoint never provides it (see `CLAUDE.md`'s "ESPN data gaps"). **No `RedZoneFactorCalculator` was built**, and the red-zone rows in the tables below don't apply to the real implementation; they're left here as the original target design in case a future paid data source (e.g. SportsDataIO) makes it viable. Similarly, **strength-of-schedule was deferred out of the first start/sit slice** — it's inherently multi-week-forward-looking, a better fit for waiver/trade (rest-of-season horizon) than a single week's start/sit call, where the matchup factor already covers the one opponent that matters. Trust `CLAUDE.md` and the code for what's actually built; this doc is the original design intent.
+
 ### 3.1 Universal factor set
 
 | Factor | Formula sketch | Position relevance |

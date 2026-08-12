@@ -69,8 +69,8 @@ A task-level execution plan, sequenced so every step ends in something runnable.
 
 - [ ] `recommendations` + `recommendation_factors` tables
 - [ ] Design the scoring model on paper first: list factors per position (QB usage factors differ from WR factors), assign initial weights, decide on a 0–100 or z-score-normalized scale
-- [ ] Implement factor calculators as pure functions (one class per factor: `MatchupFactorCalculator`, `UsageTrendFactorCalculator`, `RedZoneFactorCalculator`, `VegasImpliedTotalFactorCalculator`, `WeatherFactorCalculator`, `InjuryFactorCalculator`, `StrengthOfScheduleFactorCalculator`) — each one unit-testable in isolation with hand-crafted input data
-- [ ] Compose factors into a final score + narrative sentence per factor (e.g., "Ranked 4th in red zone touches over last 3 games")
+- [ ] Implement factor calculators as pure functions (one class per factor: `MatchupFactorCalculator`, `UsageTrendFactorCalculator`, `VegasImpliedTotalFactorCalculator`, `WeatherFactorCalculator`, `InjuryFactorCalculator`) — each one unit-testable in isolation with hand-crafted input data. **`RedZoneFactorCalculator` and `StrengthOfScheduleFactorCalculator` dropped from this list** — `player_game_stats.red_zone_touches` is always `NULL` from ESPN's free tier (see `CLAUDE.md`), so there's no real red-zone signal to compute from; SOS is inherently forward-looking across multiple weeks, a better fit for the waiver algorithm (`docs/data-sourcing-and-algorithms.md`) than a single week's start/sit call, where `MatchupFactorCalculator` already covers the one opponent that matters.
+- [ ] Compose factors into a final score + narrative sentence per factor (e.g., "Averaging 9.2 targets/game over the last 3 weeks, up from 5.1")
 - [ ] `scoring_version` field populated from a constant/config so future re-weighting doesn't corrupt history
 - [ ] `POST /api/recommendations/generate` (batch job, scheduled weekly) that scores every relevant player and writes recommendation + factor rows
 - [ ] `GET /api/recommendations/start-sit?week=&position=` — read-only endpoint over already-computed rows

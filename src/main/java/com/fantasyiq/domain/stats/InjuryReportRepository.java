@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface InjuryReportRepository extends JpaRepository<InjuryReport, Long> {
 
     Optional<InjuryReport> findByPlayerAndReportDateAndSource(Player player, LocalDate reportDate, String source);
+
+    Optional<InjuryReport> findTopByPlayerOrderByReportDateDesc(Player player);
 }

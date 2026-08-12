@@ -12,4 +12,11 @@ public interface PlayerGameStatsRepository extends JpaRepository<PlayerGameStats
     Optional<PlayerGameStats> findByPlayerAndGame(Player player, Game game);
 
     List<PlayerGameStats> findByGame(Game game);
+
+    // Prior-weeks-only, most recent first -- same reasoning as
+    // DefenseVsPositionStatsRepository's week-bound query: a week-W
+    // recommendation can only use the player's own performance from
+    // before week W as a trend signal.
+    List<PlayerGameStats> findByPlayerAndGame_SeasonAndGame_WeekLessThanOrderByGame_WeekDesc(
+            Player player, Integer season, Integer week);
 }

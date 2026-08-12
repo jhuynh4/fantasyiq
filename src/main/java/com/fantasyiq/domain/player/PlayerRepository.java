@@ -1,9 +1,11 @@
 package com.fantasyiq.domain.player;
 
+import com.fantasyiq.domain.team.Team;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,4 +16,6 @@ public interface PlayerRepository extends JpaRepository<Player, UUID> {
     @Query(value = "SELECT * FROM players WHERE full_name ILIKE CONCAT('%', :query, '%') "
             + "ORDER BY full_name LIMIT 25", nativeQuery = true)
     List<Player> search(@Param("query") String query);
+
+    List<Player> findByCurrentTeamAndPositionIn(Team currentTeam, Collection<String> positions);
 }

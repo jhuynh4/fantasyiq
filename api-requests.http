@@ -135,3 +135,16 @@ Authorization: Bearer {{accessToken}}
 ### returns 503 once the circuit breaker trips)
 POST {{baseUrl}}/api/odds/ingest
 Authorization: Bearer {{accessToken}}
+
+### Generate start/sit recommendations for a specific week (requires auth; no external
+### call -- pure composition over already-ingested/computed data. Run games/injuries/
+### player-game-stats/defense-vs-position/weather/odds ingestion for the same season
+### FIRST for the richest factor coverage, though any subset works -- each factor is
+### independently optional, and a player with zero available factors gets no row at all)
+POST {{baseUrl}}/api/recommendations/generate?season=2025&week=1
+Authorization: Bearer {{accessToken}}
+
+### Read already-computed start/sit recommendations for a week, sorted by score
+### descending (requires auth; position filter optional)
+GET {{baseUrl}}/api/recommendations/start-sit?season=2025&week=1&position=WR
+Authorization: Bearer {{accessToken}}
