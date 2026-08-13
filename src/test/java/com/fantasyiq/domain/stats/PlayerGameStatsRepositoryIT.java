@@ -16,7 +16,6 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.groups.Tuple.tuple;
 
 /**
  * findTop4ByPlayerOrderByGame_SeasonDescGame_WeekDesc backs the /trending
@@ -45,6 +44,11 @@ class PlayerGameStatsRepositoryIT extends IntegrationTestBase {
 
         // 2098 weeks 16-17, then 2099 weeks 1-2 -- the most recent 4 games
         // overall span a season boundary, oldest to newest across both years.
+        // targets is given a distinct, order-identifying value per row so
+        // the assertion below can verify ordering via a directly-mapped
+        // column rather than game (a LAZY association that would throw
+        // LazyInitializationException once accessed outside the repository
+        // call's now-closed persistence context).
         saveStats(player, ari, sf, 2098, 16, 5);
         saveStats(player, ari, sf, 2098, 17, 6);
         saveStats(player, ari, sf, 2099, 1, 7);
@@ -56,12 +60,8 @@ class PlayerGameStatsRepositoryIT extends IntegrationTestBase {
                 .findTop4ByPlayerOrderByGame_SeasonDescGame_WeekDesc(player);
 
         assertThat(mostRecent).hasSize(4);
-        assertThat(mostRecent).extracting(g -> g.getGame().getSeason(), g -> g.getGame().getWeek())
-                .containsExactly(
-                        tuple(2099, 2),
-                        tuple(2099, 1),
-                        tuple(2098, 17),
-                        tuple(2098, 16));
+        assertThat(mostRecent).extracting(PlayerGameStats::getTargets)
+                .containsExactly(8, 7, 6, 5);
     }
 
     private void saveStats(Player player, Team offenseTeam, Team opponent, int season, int week, int targets) {
