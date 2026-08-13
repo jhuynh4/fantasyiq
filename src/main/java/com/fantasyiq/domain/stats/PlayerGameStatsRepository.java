@@ -19,4 +19,8 @@ public interface PlayerGameStatsRepository extends JpaRepository<PlayerGameStats
     // before week W as a trend signal.
     List<PlayerGameStats> findByPlayerAndGame_SeasonAndGame_WeekLessThanOrderByGame_WeekDesc(
             Player player, Integer season, Integer week);
+
+    // No season boundary -- trending is "what's this player's usage doing
+    // right now", not tied to a specific week's recommendation.
+    List<PlayerGameStats> findTop4ByPlayerOrderByGame_SeasonDescGame_WeekDesc(Player player);
 }

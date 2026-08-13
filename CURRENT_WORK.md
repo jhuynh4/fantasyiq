@@ -1,47 +1,51 @@
 # Current Work
 
-## Status: Phase 3 first slice (start/sit) built, manually verified against real data, ready to push for CI
+## Status: player trending endpoint built, not yet compiled/tested — awaiting a build
 
-Branch `phase-3/start-sit-scoring-engine` has the full first slice of Phase 3, built clean via IntelliJ and manually verified end-to-end against the live app with real 2025 season data (games, injuries, player-game-stats, defense-vs-position). Not yet committed/pushed.
+Branch `phase-3/player-trending-endpoint` adds `GET /api/players/{id}/trending`, per user's "whatever's best" delegation after the start/sit merge — this was the remaining item from Phase 3's original checklist that adds real, non-duplicate value (see below for why `GET /api/rankings` was skipped). Written but not yet built/tested.
 
 ## What's been completed (Phase 1 + Phase 2, all merged to `main`)
 
 **Phase 1** — auth (JWT register/login/refresh with token rotation) and player ingestion.
 
-**Phase 2 — fully complete**, all merged: games/schedule ingestion, injury ingestion, player-game-stats ingestion, hardening bundle (audit logging, Resilience4j, scheduling, structured logging), `defense_vs_position_stats` (computed), `weather_forecasts` (OpenWeatherMap), `betting_lines` (The Odds API). See `CLAUDE.md` for the durable detail on all of this — this file is just "where did we leave off."
+**Phase 2 — fully complete**: games/schedule ingestion, injury ingestion, player-game-stats ingestion, hardening bundle (audit logging, Resilience4j, scheduling, structured logging), `defense_vs_position_stats` (computed), `weather_forecasts` (OpenWeatherMap), `betting_lines` (The Odds API).
 
-## Phase 3, first slice — start/sit recommendation engine (on `phase-3/start-sit-scoring-engine`, not pushed)
+## Phase 3, first slice — start/sit recommendation engine (merged)
 
-Scope was deliberately narrowed from the full `docs/development-plan.md` Phase 3 checklist to **start/sit only** — waiver, trade, and rankings all reuse the same factor engine per the plan, so proving the engine works on the simplest case first made sense before generalizing.
+Scope was deliberately narrowed to **start/sit only** — waiver, trade, and rankings all reuse the same factor engine per `docs/development-plan.md`, so proving the engine works on the simplest case first made sense before generalizing.
 
-- `V13` migration: `recommendations` (upserted by `player`+`season`+`week`+`type`) + `recommendation_factors` (child table, `ON DELETE CASCADE`, fully replaced on each regeneration)
-- `V14` migration: widens `recommendation_factors.factor_weight` from `V13`'s `NUMERIC(5,4)` to `NUMERIC(6,2)` — found during manual testing (see below)
-- New `domain.recommendation` package: `Recommendation`/`RecommendationFactor` entities + `RecommendationReconciliationService`
-- New `analytics.scoring` package: `FactorResult` + five pure calculators — `MatchupFactorCalculator`, `VegasImpliedTotalFactorCalculator`, `WeatherFactorCalculator`, `InjuryFactorCalculator`, `UsageTrendFactorCalculator`
-- New `analytics.startsit.StartSitRecommendationService` — composes the calculators per player, sums contributions into a score, skips players with zero available factors entirely
-- New `POST /api/recommendations/generate?season=&week=` and `GET /api/recommendations/start-sit?season=&week=&position=`
-- **A factor deliberately dropped**: `RedZoneFactorCalculator` from the original plan — `player_game_stats.red_zone_touches` is always `NULL` from ESPN, no real signal to compute. `docs/development-plan.md` and `docs/data-sourcing-and-algorithms.md` were both updated to document this explicitly, per explicit user request.
-- `ArchitectureRulesTest`'s `analyticsMustNotDependOnApiLayer` rule had its `allowEmptyShould(true)` removed now that `analytics` has real classes — matches the exact precedent already set for `domain`/`ingestion` earlier in the project.
+- `V13`/`V14` migrations: `recommendations` + `recommendation_factors` tables
+- New `domain.recommendation` package (entities + reconciliation), new `analytics.scoring` package (`FactorResult` + five pure calculators: Matchup, VegasImpliedTotal, Weather, Injury, UsageTrend), new `analytics.startsit.StartSitRecommendationService` (composes calculators into a scored, explainable recommendation per player, skips players with zero available factors)
+- New endpoints: `POST /api/recommendations/generate?season=&week=`, `GET /api/recommendations/start-sit?season=&week=&position=`
+- `RedZoneFactorCalculator`/`StrengthOfScheduleFactorCalculator` deliberately dropped from the original plan (ESPN never provides red zone touches; SOS is a better fit for a future waiver/trade slice) — `docs/development-plan.md` and `docs/data-sourcing-and-algorithms.md` updated to say so explicitly.
 
-See `CLAUDE.md`'s "Start/sit recommendation engine" section for the full design writeup.
+See `CLAUDE.md`'s "Start/sit recommendation engine" section for the full design writeup, and its "Testing strategy" section for the test-infrastructure fixes below.
 
-## Manual verification — found and fixed three real bugs
+**Manually verified** against real 2025 season data: generated 760 real recommendations for week 8, spot-checked the math (matchup/usage narratives, score = sum of contributions, `OUT` correctly forcing a `-1000`-dominated score and `LOW` confidence, `QUESTIONABLE` applying a smaller penalty without forcing confidence down), confirmed idempotent regeneration.
 
-Tested against the live app with real 2025 season data (games, injuries, and the full season's player-game-stats already ingested; computed `defense_vs_position_stats` for weeks 1-7 to build up matchup history, then generated recommendations for week 8):
+**Real bugs found and fixed during this slice** (beyond the feature itself):
+1. An `ingestion_runs.source` audit constant exceeded its `VARCHAR(30)` column.
+2. `recommendation_factors.factor_weight` was sized for a fractional 0..1 weight; the calculators use point-scale weights instead — widened via `V14`.
+3. Both of the above (and other unrelated exceptions) were surfacing as a misleading `403` instead of a real status, due to Spring Security not permitting the internal `/error` dispatch — `GlobalExceptionHandler` now has a catch-all handler returning a real `500` and logging server-side.
+4. **A significant, unrelated pre-existing bug surfaced and fixed**: `IntegrationTestBase`'s shared Testcontainers Postgres was tied to `@Container`/`@Testcontainers`' per-class lifecycle, so whichever IT test class finished first stopped the container out from under every sibling class still to run — intermittent CI-only "connection refused" failures. Fixed by starting the container once via a static initializer (the correct Testcontainers "singleton container" pattern). Fixing *that* then exposed a second, larger issue: several pre-existing IT test classes only cleaned up the tables they personally touched (or nothing at all), silently relying on the old buggy container-restart behavor for a fresh-enough DB — once the container stopped restarting, that caused FK constraint violations and wrong row counts across half a dozen unrelated test classes. Fixed by centralizing a comprehensive, FK-safe table wipe in `IntegrationTestBase`'s own `@BeforeEach`, which now runs before any subclass's own. Finally, a connection-pool-exhaustion issue surfaced once *that* was fixed (many distinct cached Spring test contexts, each with a full-size Hikari pool, against the one shared Postgres) — fixed by capping `application-test.yml`'s Hikari pool size to 3.
 
-- **Bug 1**: `StartSitRecommendationComputationService`'s audit-log `SOURCE` constant (`"COMPUTED_START_SIT_RECOMMENDATIONS"`, 35 chars) exceeded `ingestion_runs.source`'s `VARCHAR(30)`, so the very first audit-row insert failed before the real computation ever ran. Fixed by shortening to `"COMPUTED_START_SIT"`.
-- **Bug 2**: `recommendation_factors.factor_weight` was `NUMERIC(5,4)` in `V13` (assumed a fractional 0..1 weight, matching the original `docs/system-design.md` sketch), but the actual calculators use point-scale weights (e.g. `MatchupFactorCalculator`'s `WEIGHT=25`), overflowing that precision on the first real insert. Fixed via `V14` migration widening to `NUMERIC(6,2)`.
-- **Bug 3 (bigger, pre-existing)**: both of the above failures were surfacing to the client as a misleading `403` instead of a real error status — the same unpermitted-`/error`-dispatch masking already found once during weather testing and narrowly fixed for vendor-unavailable exceptions only. Since it bit a second, completely unrelated exception type (`DataIntegrityViolationException`) and cost real debugging time before the real error was found (via checking `ingestion_runs.error_message` and eventually the IntelliJ console), **`GlobalExceptionHandler` now has a catch-all `@ExceptionHandler(Exception.class)`** returning `500` and logging the real exception server-side. This should prevent this exact class of confusion from recurring for any future uncaught exception.
+## Player trending endpoint (on `phase-3/player-trending-endpoint`, not pushed)
 
-After both schema fixes: generated 760 real recommendations for week 8 of the 2025 season. Spot-checked results: Ja'Marr Chase topped the WR list with a real, sensible signal ("targets up from 9.0 to 17.5 over trailing games" + a favorable matchup rank); score fields matched the sum of their factor contributions in every case checked; a real `OUT` player's score was correctly dominated by the `-1000` injury penalty with confidence forced to `LOW`; a `QUESTIONABLE` player got a smaller `-10` penalty without forcing confidence down (matches the "only OUT/IR forces LOW" design). No `VEGAS`/`WEATHER` factors appeared for this 2025 historical data, as expected — no `betting_lines`/`weather_forecasts` rows exist for a season that already happened (Odds API only has current lines, weather ingestion now correctly skips past kickoffs). Re-ran generation a second time and confirmed the row count stayed at 760 (idempotent upsert).
+- New `PlayerGameStatsRepository.findTop4ByPlayerOrderByGame_SeasonDescGame_WeekDesc` — the one genuinely new piece of logic here; unlike every other query in this codebase it has **no season/week boundary**, since trending means "what's this player's usage doing right now," not tied to one week's recommendation. Covered by a new `PlayerGameStatsRepositoryIT` proving it correctly crosses a season boundary (fixtures span two distinctive fake seasons, 2098/2099).
+- `PlayerController.trending` reuses the already-tested `UsageTrendFactorCalculator` directly against those 4 games — no new scoring logic, pure wiring. Matches the established convention of not writing controller-level tests (only `AuthControllerIT` has one, everything else is tested at the service/repository layer).
+- **`GET /api/rankings?position=&scoring=ppr` deliberately not built** — as specified in the original plan ("positional rankings from the same factor engine"), it would just re-sort the exact data `GET /api/recommendations/start-sit` already returns, so it'd be a near-duplicate route rather than new value. Told the user this reasoning rather than silently skipping it; revisit if a genuinely different ranking basis (e.g. season-to-date actual production) is wanted later.
+
+## What remains (lower priority, not blocking)
+
+- WireMock contract test coverage for `EspnInjuryProvider` (the only adapter without one)
 
 ## Recommended next steps
 
-1. Commit and push `phase-3/start-sit-scoring-engine`, let CI verify.
-2. Once merged: waiver, trade, and rankings all reuse this same factor engine (per `docs/development-plan.md`) — natural next slices. To get `VEGAS`/`WEATHER` factors showing up in a real demo, would need to wait for the 2026 season to actually start (games close enough for weather's 5-day window, and matchup/usage data to exist for that season) or re-test once it does.
+1. User builds `phase-3/player-trending-endpoint` via IntelliJ, then manual-test against real data (e.g. a player with 4+ ingested games from the 2025 season) before push.
+2. Once merged: waiver and trade are the remaining Phase-3-adjacent features that reuse the same factor engine, per `docs/development-plan.md`. To see `VEGAS`/`WEATHER` factors appear in a start/sit demo, need to wait for the 2026 season to actually start (games close enough for weather's 5-day window, and matchup/usage data to exist for that season).
 
-Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, and `phase-2/betting-lines` still exist on origin from prior slices (not yet deleted — user has deferred that cleanup each time).
+Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, `phase-2/betting-lines`, and `phase-3/start-sit-scoring-engine` still exist on origin from prior slices (not yet deleted — user has deferred that cleanup each time).
 
 ## No known blockers or in-flight problems
 
-Everything on `main` is merged, CI-verified, and manually verified end-to-end against real ESPN, OpenWeatherMap, and The Odds API data. Local Gradle CLI has been unreliable this session (JVM loopback-socket issue — worked around by building via IntelliJ instead, see `CLAUDE.md`'s "Local environment gotchas"). The Docker Desktop Testcontainers context mismatch gotcha is also documented there and was worked around previously, not fixed at the system level — either may resurface on a fresh machine/session.
+Everything on `main` is merged and CI-verified, including a substantially more robust IT test suite after this slice's fixes. Local Gradle CLI has been unreliable this session (JVM loopback-socket issue — worked around by building via IntelliJ instead, see `CLAUDE.md`'s "Local environment gotchas"). The Docker Desktop Testcontainers context mismatch gotcha is also documented there and was worked around previously, not fixed at the system level — either may resurface on a fresh machine/session.
