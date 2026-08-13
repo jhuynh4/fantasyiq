@@ -6,6 +6,8 @@ import com.fantasyiq.auth.InvalidRefreshTokenException;
 import com.fantasyiq.ingestion.odds.OddsUnavailableException;
 import com.fantasyiq.ingestion.stats.EspnUnavailableException;
 import com.fantasyiq.ingestion.weather.WeatherUnavailableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -16,6 +18,8 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(EmailAlreadyInUseException.class)
     public ProblemDetail handleEmailAlreadyInUse(EmailAlreadyInUseException ex) {
@@ -47,5 +51,20 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+    }
+
+    /**
+     * Catch-all so *any* unhandled exception gets a real 500 instead of
+     * silently falling through to the same unpermitted-/error-dispatch 403
+     * masking described above -- that masking bit this project twice
+     * (WeatherUnavailableException before it got its own handler, then a
+     * plain DataIntegrityViolationException from a too-long ingestion_runs.source
+     * value) before this existed. Logs the real exception server-side too,
+     * since the 403 masking had also been silently swallowing that.
+     */
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnexpected(Exception ex) {
+        log.error("Unhandled exception reached GlobalExceptionHandler", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
     }
 }

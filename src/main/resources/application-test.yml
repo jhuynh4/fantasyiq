@@ -6,6 +6,19 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  datasource:
+    hikari:
+      # Each distinct @DynamicPropertySource/@TestConfiguration combination
+      # across the IT/contract test suite gets its own cached Spring context
+      # and therefore its own HikariCP pool, all pointed at the same shared
+      # Testcontainers Postgres (see IntegrationTestBase). At Spring Boot's
+      # default pool size (10), a dozen-plus contexts comfortably exceed
+      # Postgres's default max_connections, causing intermittent
+      # "FlywaySqlException" / connection failures for whichever context
+      # happens to initialize once the limit's already been hit. Tests run
+      # sequentially, so there's no real concurrency need per pool.
+      maximum-pool-size: 3
+      minimum-idle: 1
 
 logging:
   level:

@@ -37,12 +37,9 @@ class ArchitectureRulesTest {
 
     @Test
     void analyticsMustNotDependOnApiLayer() {
-        // allowEmptyShould: analytics has no concrete classes yet (Phase 3) --
-        // only package-info.java. Remove once real classes land there.
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.fantasyiq.analytics..")
-                .should().dependOnClassesThat().resideInAPackage("com.fantasyiq.api..")
-                .allowEmptyShould(true);
+                .should().dependOnClassesThat().resideInAPackage("com.fantasyiq.api..");
         rule.check(classes);
     }
 
