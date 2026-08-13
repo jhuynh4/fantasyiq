@@ -94,6 +94,13 @@ Authorization: Bearer {{accessToken}}
 GET {{baseUrl}}/api/players/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{accessToken}}
 
+### Get a player's trending/usage-delta signal -- same UsageTrendFactorCalculator the
+### scoring engine uses, run against their 4 most recent games with no season/week
+### boundary. Player-game-stats must already be ingested; a player with fewer than 4
+### games gets a response with a null contribution/narrative, not a 404.
+GET {{baseUrl}}/api/players/00000000-0000-0000-0000-000000000000/trending
+Authorization: Bearer {{accessToken}}
+
 ### Trigger schedule ingestion from ESPN for the CURRENT season (requires auth;
 ### regular-season games only -- may return 0 if ESPN hasn't published the slate yet)
 POST {{baseUrl}}/api/games/ingest
