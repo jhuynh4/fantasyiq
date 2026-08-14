@@ -155,3 +155,12 @@ Authorization: Bearer {{accessToken}}
 ### descending (requires auth; position filter optional)
 GET {{baseUrl}}/api/recommendations/start-sit?season=2025&week=1&position=WR
 Authorization: Bearer {{accessToken}}
+
+### Backtest: (re)generates start/sit recommendations for every week of a completed
+### season, then correlates predicted scores against real fantasy points from
+### player_game_stats (requires auth; run player-game-stats/ingest for the full
+### season FIRST). Takes a while -- it's re-running /generate for every week with
+### games. Injury-overridden recommendations are excluded from the correlation --
+### see BacktestResult's own doc comment for why.
+POST {{baseUrl}}/api/recommendations/backtest?season=2025
+Authorization: Bearer {{accessToken}}

@@ -15,4 +15,6 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
 
     List<Recommendation> findBySeasonAndWeekAndTypeAndPlayer_Position(
             Integer season, Integer week, String type, String position);
+
+    List<Recommendation> findBySeasonAndType(Integer season, String type);
 }

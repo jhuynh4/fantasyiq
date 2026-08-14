@@ -1,9 +1,11 @@
 package com.fantasyiq.api.controller;
 
+import com.fantasyiq.api.dto.BacktestResponse;
 import com.fantasyiq.api.dto.RecommendationGenerateResponse;
 import com.fantasyiq.api.dto.StartSitRecommendationResponse;
 import com.fantasyiq.domain.recommendation.Recommendation;
 import com.fantasyiq.domain.recommendation.RecommendationRepository;
+import com.fantasyiq.ingestion.scheduler.BacktestComputationService;
 import com.fantasyiq.ingestion.scheduler.StartSitRecommendationComputationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,11 +24,14 @@ public class RecommendationController {
     private static final String START_SIT_TYPE = "START_SIT";
 
     private final StartSitRecommendationComputationService startSitRecommendationComputationService;
+    private final BacktestComputationService backtestComputationService;
     private final RecommendationRepository recommendationRepository;
 
     public RecommendationController(StartSitRecommendationComputationService startSitRecommendationComputationService,
+                                     BacktestComputationService backtestComputationService,
                                      RecommendationRepository recommendationRepository) {
         this.startSitRecommendationComputationService = startSitRecommendationComputationService;
+        this.backtestComputationService = backtestComputationService;
         this.recommendationRepository = recommendationRepository;
     }
 
@@ -49,5 +54,10 @@ public class RecommendationController {
                 .map(StartSitRecommendationResponse::from)
                 .toList();
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/backtest")
+    public ResponseEntity<BacktestResponse> backtest(@RequestParam int season) {
+        return ResponseEntity.ok(BacktestResponse.from(backtestComputationService.runBacktest(season)));
     }
 }
