@@ -1,8 +1,10 @@
 package com.fantasyiq.api.controller;
 
+import com.fantasyiq.analytics.backtest.WeightTuningService;
 import com.fantasyiq.api.dto.BacktestResponse;
 import com.fantasyiq.api.dto.RecommendationGenerateResponse;
 import com.fantasyiq.api.dto.StartSitRecommendationResponse;
+import com.fantasyiq.api.dto.WeightTuningResponse;
 import com.fantasyiq.domain.recommendation.Recommendation;
 import com.fantasyiq.domain.recommendation.RecommendationRepository;
 import com.fantasyiq.ingestion.scheduler.BacktestComputationService;
@@ -25,13 +27,16 @@ public class RecommendationController {
 
     private final StartSitRecommendationComputationService startSitRecommendationComputationService;
     private final BacktestComputationService backtestComputationService;
+    private final WeightTuningService weightTuningService;
     private final RecommendationRepository recommendationRepository;
 
     public RecommendationController(StartSitRecommendationComputationService startSitRecommendationComputationService,
                                      BacktestComputationService backtestComputationService,
+                                     WeightTuningService weightTuningService,
                                      RecommendationRepository recommendationRepository) {
         this.startSitRecommendationComputationService = startSitRecommendationComputationService;
         this.backtestComputationService = backtestComputationService;
+        this.weightTuningService = weightTuningService;
         this.recommendationRepository = recommendationRepository;
     }
 
@@ -59,5 +64,10 @@ public class RecommendationController {
     @PostMapping("/backtest")
     public ResponseEntity<BacktestResponse> backtest(@RequestParam int season) {
         return ResponseEntity.ok(BacktestResponse.from(backtestComputationService.runBacktest(season)));
+    }
+
+    @GetMapping("/tune-weights")
+    public ResponseEntity<WeightTuningResponse> tuneWeights(@RequestParam int season) {
+        return ResponseEntity.ok(WeightTuningResponse.from(weightTuningService.analyzeWeights(season)));
     }
 }

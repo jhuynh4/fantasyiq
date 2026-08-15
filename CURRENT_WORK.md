@@ -1,8 +1,8 @@
 # Current Work
 
-## Status: backtest endpoint built and verified against real data — ready to push for CI
+## Status: weight tuning + recent-performance factor built and verified — ready to push for CI
 
-Branch `phase-3/backtest-validation` adds `POST /api/recommendations/backtest?season=`, closing out the last open item from Phase 3's original checklist. Built clean via IntelliJ, manually verified end-to-end against the full real 2025 season, and a real performance bug was found and fixed along the way (see below).
+Branch `phase-3/recent-performance-factor` has **two combined pieces** presented as one PR (built directly on top of each other, one coherent story): the weight-tuning analysis tool, and a new sixth factor calculator built directly from what that tool's investigation found. Built clean via IntelliJ and manually verified end-to-end against the full real 2025 season — with a genuinely strong result (see below).
 
 ## What's been completed (Phase 1 + Phase 2, all merged to `main`)
 
@@ -10,57 +10,47 @@ Branch `phase-3/backtest-validation` adds `POST /api/recommendations/backtest?se
 
 **Phase 2 — fully complete**: games/schedule ingestion, injury ingestion, player-game-stats ingestion, hardening bundle (audit logging, Resilience4j, scheduling, structured logging), `defense_vs_position_stats` (computed), `weather_forecasts` (OpenWeatherMap), `betting_lines` (The Odds API).
 
-## Phase 3 (merged)
+## Phase 3 — fully complete, all merged
 
-**Start/sit recommendation engine** — scope deliberately narrowed to start/sit only at first; waiver, trade, and rankings all reuse the same factor engine per `docs/development-plan.md`.
+**Start/sit recommendation engine**, **player trending endpoint**, **backtest validation** — see `CLAUDE.md` for the full durable writeup. The *original* backtest run (before this branch's work) showed essentially zero correlation between predicted score and real fantasy output — an honest, expected result for a `v1` model whose weights were hand-picked and never checked against outcomes.
 
-- `V13`/`V14` migrations: `recommendations` + `recommendation_factors` tables
-- New `domain.recommendation` package (entities + reconciliation), new `analytics.scoring` package (`FactorResult` + five pure calculators: Matchup, VegasImpliedTotal, Weather, Injury, UsageTrend), new `analytics.startsit.StartSitRecommendationService`
-- Endpoints: `POST /api/recommendations/generate?season=&week=`, `GET /api/recommendations/start-sit?season=&week=&position=`
-- `RedZoneFactorCalculator`/`StrengthOfScheduleFactorCalculator` deliberately dropped from the original plan (ESPN never provides red zone touches; SOS is a better fit for waiver/trade) — docs updated to say so.
-- Manually verified against real 2025 data: 760 real recommendations generated for week 8, math/confidence/injury-override all spot-checked correct.
+## Weight tuning + recent-performance factor (on `phase-3/recent-performance-factor`, not pushed)
 
-**Player trending endpoint** — the other checklist item worth building (`GET /api/players/{id}/trending`), reusing `UsageTrendFactorCalculator` directly against a player's 4 most recent games with no season/week boundary. `GET /api/rankings` was deliberately skipped as a near-duplicate of the start-sit endpoint.
+- New `analytics.backtest.RecommendationMatcher` (shared matching logic, extracted from `BacktestService`), `SimpleLinearRegression` (hand-rolled univariate OLS), `WeightTuningService`, `GET /api/recommendations/tune-weights?season=`.
+- **Investigation**: the initial tuning run showed near-zero suggested multipliers for both factors with data (`MATCHUP` ≈ 0.0007, `USAGE` ≈ 0.034). Rather than mechanically applying that, checked whether the near-zero result meant "no signal in the data" or "this fit can't detect it" — found that a player's own fantasy points from their single most recent prior game correlate with their next game's points at **~0.53** (n=5,015, cross-checked via SQL) — a well-known baseline in fantasy analytics, proving real signal exists that the original five factors weren't capturing.
+- New `analytics.scoring.RecentPerformanceFactorCalculator` — built directly from that finding. Uses only the single most recent prior game's `fantasy_points_ppr`, with `WEIGHT = 0.53` set to the empirically-measured slope itself (the one factor in this engine whose initial weight came from real data, not intuition). Wired into `StartSitRecommendationService.gatherFactors`, reusing the already-fetched `priorGames` list — no new query needed.
 
-See `CLAUDE.md`'s "Start/sit recommendation engine" and "API endpoints" sections for the full design writeup.
+## Real result — a genuinely strong improvement
 
-**Real bugs found and fixed during this phase** (beyond the features themselves) — all now documented in `CLAUDE.md`:
-1. An `ingestion_runs.source` audit constant exceeded its `VARCHAR(30)` column.
-2. `recommendation_factors.factor_weight` was sized for a fractional 0..1 weight; widened via `V14` to match the actual point-scale weights used.
-3. Both of the above were surfacing as a misleading `403` instead of a real status — `GlobalExceptionHandler` now has a catch-all handler returning a real `500` and logging server-side.
-4. **A significant, unrelated pre-existing IT test infrastructure bug**: `IntegrationTestBase`'s shared Testcontainers Postgres was tied to per-class `@Container`/`@Testcontainers` lifecycle, causing intermittent CI-only "connection refused" failures. Fixed via a static-initializer singleton container. That fix then exposed a second, larger issue — several IT classes only cleaned up their own tables (or nothing at all), relying on the old buggy restart behavior for a fresh-enough DB — fixed by centralizing a comprehensive FK-safe wipe in `IntegrationTestBase`'s `@BeforeEach`. That then exposed a connection-pool-exhaustion issue, fixed by capping the test-profile Hikari pool size.
-5. A `LazyInitializationException` in the new `PlayerGameStatsRepositoryIT` test (asserting on a `LAZY` association outside its persistence context) — fixed by asserting on a directly-mapped column instead.
+Re-ran the full 2025 season backtest (18 min, background) after adding the new factor:
 
-## Backtesting (on `phase-3/backtest-validation`, not pushed)
+- **Overall correlation: `0.0137` → `0.306`** (RB `0.283`, TE `0.301`, WR `0.294`, QB `0.166`) — independently re-verified against Postgres's own `corr()`, exact match to 13 significant figures.
+- Re-ran `/tune-weights` afterward: `RECENT_PERFORMANCE` itself shows a `0.537` correlation (matches the original baseline almost exactly) with a suggested multiplier of **`1.01`** — the empirically-derived initial weight was already almost perfectly calibrated on the first try, no further adjustment needed.
+- `MATCHUP`/`USAGE` unchanged, as expected (adding an independent factor doesn't change their own regression).
 
-Closes the dev plan's last Phase 3 checklist item: does the engine's score actually predict real fantasy output, not just look internally consistent?
+See `CLAUDE.md`'s "Weight tuning" section for the full writeup, including the "Real result against the 2025 season" subsection with all the numbers.
 
-- New `analytics.backtest` package: `PearsonCorrelation` (hand-rolled, pure, unit-tested independently), `BacktestResult`, `BacktestService` — regenerates every week of a season's `START_SIT` recommendations, then correlates predicted score against real `player_game_stats.fantasy_points_ppr`, overall and per position.
-- **Injury-overridden recommendations are excluded from the correlation**, reported separately (`excludedDueToInjuryOverride`) — `InjuryFactorCalculator` uses the player's *current* status, not a historical one, so applying today's status to a months-old game would just inject synthetic noise.
-- New endpoint: `POST /api/recommendations/backtest?season=`
-- `BacktestServiceIT` uses deliberately minimal fixtures (each test player has exactly one factor) so the resulting correlation is an exact, assertable number, plus a fixture player with a real `OUT` status and real box-score points on file to prove the exclusion path actually excludes.
-
-See `CLAUDE.md`'s new "Backtesting" section for the full design writeup.
-
-## Manual verification — a real performance bug, and a real (important) finding about the model
-
-**Performance bug found and fixed**: `BacktestService.runBacktest` was `@Transactional`, and it calls `StartSitRecommendationService.computeForWeek` (also `@Transactional`) 18 times in a loop. Spring's default propagation joined all 18 weeks into one giant Hibernate session/transaction, and a full-season run against real 2025 data took **2 hours 9 minutes** before finishing. Removed `@Transactional` from `runBacktest` so each week gets its own transaction (matching `computeForWeek`'s own boundary) — the same run then took **~18 minutes**, a ~7x improvement. Still slower than ideal (likely N+1-style per-player-per-factor queries inside `gatherFactors`, repeated across ~15,000 player-weeks) but not blocking, since this is an occasional analysis endpoint, not a hot path — flagged as a real follow-up optimization if it needs to run often.
-
-**The actual backtest result against the full 2025 season is the headline finding**: 15,139 recommendations generated, 5,736 matched against real box scores, and the predicted score's correlation with actual fantasy output came out **essentially zero** (-0.02 to +0.06 depending on position). Independently cross-checked via Postgres's own `corr()` aggregate — exact match on the matched-pair count, confirming this is a real result, not a bug in the join/exclusion logic. This is the expected, correct outcome of a `v1` model whose factor weights were hand-picked and never tuned against outcomes before this ran for the first time — exactly what `docs/data-sourcing-and-algorithms.md` §2.5 anticipated needing eventually. **Don't casually reweight the factors based on this alone** — real tuning is a deliberate follow-up effort, not a quick guess.
+**Real bugs found and fixed across Phase 3** (all documented in `CLAUDE.md`, for reference):
+1. `ingestion_runs.source` audit constant exceeded its `VARCHAR(30)` column.
+2. `recommendation_factors.factor_weight` sized for a fractional weight; widened via `V14`.
+3. Uncaught exceptions surfacing as misleading `403`s — `GlobalExceptionHandler` now has a catch-all handler.
+4. Pre-existing IT test infrastructure bugs (Testcontainers lifecycle, cross-test data pollution, connection-pool exhaustion) — all three fixed.
+5. `LazyInitializationException` in a repository test.
+6. `BacktestService`'s nested-transaction performance bug (2h9m → ~18min).
 
 ## What remains (lower priority, not blocking)
 
 - WireMock contract test coverage for `EspnInjuryProvider` (the only adapter without one)
-- Backtest performance (N+1 query pattern, ~18 min for a full season) — not urgent, occasional endpoint
-- **Real, substantive next step surfaced by this work**: the scoring engine's `v1` weights need actual tuning against backtest data before the recommendations are more than "internally consistent." Worth a dedicated future effort (grid search / simple regression against the same factor inputs, per the docs' own "where ML could fit later" note) rather than guessing new numbers.
+- Backtest performance (N+1 query pattern inside `gatherFactors`, ~18 min for a full season) — not urgent, occasional endpoint
+- `MatchupFactorCalculator`'s long-run uniform averaging (diluting its own signal — contribution stddev only 3.51 across a 0–25 range) remains a real, un-investigated hypothesis if further improvement beyond 0.306 is wanted later. `USAGE` also remains weak and untouched.
 
 ## Recommended next steps
 
-1. Commit and push `phase-3/backtest-validation`, let CI verify.
-2. Once merged, Phase 3 is fully complete per its original checklist. Ask the user: pursue weight tuning (the real finding above), move to waiver/trade (reuse the same factor engine, per `docs/development-plan.md`), or something else. To see `VEGAS`/`WEATHER` factors appear in a start/sit demo, need to wait for the 2026 season to actually start.
+1. Commit and push `phase-3/recent-performance-factor`, let CI verify.
+2. Once merged: decide whether to keep pushing on model quality (the `MATCHUP` averaging-window hypothesis above) or consider this loop "closed enough" (0.306 correlation is a real, respectable result) and move to waiver/trade, which reuse this same factor engine, per `docs/development-plan.md`.
 
-Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, `phase-2/betting-lines`, `phase-3/start-sit-scoring-engine`, and `phase-3/player-trending-endpoint` still exist on origin from prior slices (not yet deleted — user has deferred that cleanup each time).
+Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, `phase-2/betting-lines`, `phase-3/start-sit-scoring-engine`, `phase-3/player-trending-endpoint`, and `phase-3/backtest-validation` still exist on origin from prior slices (not yet deleted — user has deferred that cleanup each time). `phase-3/weight-tuning` never got pushed — it was combined into `phase-3/recent-performance-factor` instead (see "Status" above).
 
 ## No known blockers or in-flight problems
 
-Everything on `main` is merged and CI-verified, including a substantially more robust IT test suite after this phase's fixes. Local Gradle CLI has been unreliable this session (JVM loopback-socket issue — worked around by building via IntelliJ instead, see `CLAUDE.md`'s "Local environment gotchas"). The Docker Desktop Testcontainers context mismatch gotcha is also documented there and was worked around previously, not fixed at the system level — either may resurface on a fresh machine/session.
+Everything on `main` is merged and CI-verified, including a substantially more robust IT test suite after Phase 3's fixes. Local Gradle CLI has been unreliable this session (JVM loopback-socket issue — worked around by building via IntelliJ instead, see `CLAUDE.md`'s "Local environment gotchas"). The Docker Desktop Testcontainers context mismatch gotcha is also documented there and was worked around previously, not fixed at the system level — either may resurface on a fresh machine/session.
