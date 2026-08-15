@@ -3,6 +3,7 @@ package com.fantasyiq.analytics.startsit;
 import com.fantasyiq.analytics.scoring.FactorResult;
 import com.fantasyiq.analytics.scoring.InjuryFactorCalculator;
 import com.fantasyiq.analytics.scoring.MatchupFactorCalculator;
+import com.fantasyiq.analytics.scoring.RecentPerformanceFactorCalculator;
 import com.fantasyiq.analytics.scoring.UsageTrendFactorCalculator;
 import com.fantasyiq.analytics.scoring.VegasImpliedTotalFactorCalculator;
 import com.fantasyiq.analytics.scoring.WeatherFactorCalculator;
@@ -137,6 +138,7 @@ public class StartSitRecommendationService {
         List<PlayerGameStats> priorGames = playerGameStatsRepository
                 .findByPlayerAndGame_SeasonAndGame_WeekLessThanOrderByGame_WeekDesc(player, season, week);
         UsageTrendFactorCalculator.calculate(priorGames, position).ifPresent(factors::add);
+        RecentPerformanceFactorCalculator.calculate(priorGames).ifPresent(factors::add);
 
         return factors;
     }

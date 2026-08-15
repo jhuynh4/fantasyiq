@@ -119,9 +119,9 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
                 .orElseThrow();
 
         List<RecommendationFactor> factors = recommendation.getFactors();
-        assertThat(factors).hasSize(5);
+        assertThat(factors).hasSize(6);
         assertThat(factors).extracting(RecommendationFactor::getFactorType)
-                .containsExactlyInAnyOrder("MATCHUP", "VEGAS", "WEATHER", "INJURY", "USAGE");
+                .containsExactlyInAnyOrder("MATCHUP", "VEGAS", "WEATHER", "INJURY", "USAGE", "RECENT_PERFORMANCE");
 
         // Score is exactly the sum of its factor contributions -- the
         // "explanation and the score are the same computation" invariant.

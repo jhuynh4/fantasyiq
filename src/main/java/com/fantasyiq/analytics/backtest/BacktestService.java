@@ -4,16 +4,13 @@ import com.fantasyiq.analytics.startsit.StartSitRecommendationService;
 import com.fantasyiq.domain.game.GameRepository;
 import com.fantasyiq.domain.recommendation.Recommendation;
 import com.fantasyiq.domain.recommendation.RecommendationRepository;
-import com.fantasyiq.domain.stats.PlayerGameStats;
-import com.fantasyiq.domain.stats.PlayerGameStatsRepository;
+
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Runs the start/sit engine across every week of a completed season, then
@@ -27,21 +24,20 @@ public class BacktestService {
 
     private static final String TYPE = "START_SIT";
     private static final int MAX_REGULAR_SEASON_WEEK = 18;
-    private static final BigDecimal INJURY_OVERRIDE_THRESHOLD = BigDecimal.valueOf(-100);
 
     private final GameRepository gameRepository;
     private final StartSitRecommendationService startSitRecommendationService;
     private final RecommendationRepository recommendationRepository;
-    private final PlayerGameStatsRepository playerGameStatsRepository;
+    private final RecommendationMatcher recommendationMatcher;
 
     public BacktestService(GameRepository gameRepository,
                             StartSitRecommendationService startSitRecommendationService,
                             RecommendationRepository recommendationRepository,
-                            PlayerGameStatsRepository playerGameStatsRepository) {
+                            RecommendationMatcher recommendationMatcher) {
         this.gameRepository = gameRepository;
         this.startSitRecommendationService = startSitRecommendationService;
         this.recommendationRepository = recommendationRepository;
-        this.playerGameStatsRepository = playerGameStatsRepository;
+        this.recommendationMatcher = recommendationMatcher;
     }
 
     /**
@@ -65,33 +61,21 @@ public class BacktestService {
         }
 
         List<Recommendation> recommendations = recommendationRepository.findBySeasonAndType(season, TYPE);
+        RecommendationMatcher.MatchResult matchResult = recommendationMatcher.match(recommendations, season);
 
         List<Double> predicted = new ArrayList<>();
         List<Double> actual = new ArrayList<>();
         Map<String, List<Double>> predictedByPosition = new LinkedHashMap<>();
         Map<String, List<Double>> actualByPosition = new LinkedHashMap<>();
-        int excludedDueToInjuryOverride = 0;
 
-        for (Recommendation recommendation : recommendations) {
-            if (hasInjuryOverride(recommendation)) {
-                excludedDueToInjuryOverride++;
-                continue;
-            }
-
-            Optional<PlayerGameStats> actualStats = playerGameStatsRepository
-                    .findByPlayerAndGame_SeasonAndGame_Week(recommendation.getPlayer(), season, recommendation.getWeek());
-            if (actualStats.isEmpty() || actualStats.get().getFantasyPointsPpr() == null) {
-                continue;
-            }
-
-            double predictedScore = recommendation.getScore().doubleValue();
-            double actualPoints = actualStats.get().getFantasyPointsPpr().doubleValue();
+        for (MatchedRecommendation match : matchResult.matched()) {
+            double predictedScore = match.recommendation().getScore().doubleValue();
             predicted.add(predictedScore);
-            actual.add(actualPoints);
+            actual.add(match.actualPoints());
 
-            String position = recommendation.getPlayer().getPosition();
+            String position = match.recommendation().getPlayer().getPosition();
             predictedByPosition.computeIfAbsent(position, p -> new ArrayList<>()).add(predictedScore);
-            actualByPosition.computeIfAbsent(position, p -> new ArrayList<>()).add(actualPoints);
+            actualByPosition.computeIfAbsent(position, p -> new ArrayList<>()).add(match.actualPoints());
         }
 
         Map<String, Double> correlationByPosition = new LinkedHashMap<>();
@@ -100,13 +84,8 @@ public class BacktestService {
                     PearsonCorrelation.of(predictedByPosition.get(position), actualByPosition.get(position)));
         }
 
-        return new BacktestResult(season, weeksEvaluated, recommendations.size(), excludedDueToInjuryOverride,
-                predicted.size(), PearsonCorrelation.of(predicted, actual), correlationByPosition);
-    }
-
-    private boolean hasInjuryOverride(Recommendation recommendation) {
-        return recommendation.getFactors().stream()
-                .anyMatch(f -> "INJURY".equals(f.getFactorType())
-                        && f.getContribution().compareTo(INJURY_OVERRIDE_THRESHOLD) < 0);
+        return new BacktestResult(season, weeksEvaluated, recommendations.size(),
+                matchResult.excludedDueToInjuryOverride(), predicted.size(),
+                PearsonCorrelation.of(predicted, actual), correlationByPosition);
     }
 }

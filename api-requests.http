@@ -164,3 +164,13 @@ Authorization: Bearer {{accessToken}}
 ### see BacktestResult's own doc comment for why.
 POST {{baseUrl}}/api/recommendations/backtest?season=2025
 Authorization: Bearer {{accessToken}}
+
+### Weight tuning: pure read-only analysis over whatever recommendations already exist
+### for the season (run /generate or /backtest FIRST -- this does not regenerate
+### anything itself). For each continuous factor (MATCHUP/VEGAS/WEATHER/USAGE), fits a
+### regression of actual points against that factor's current contribution --
+### suggestedScaleMultiplier close to 1.0 means already well-calibrated, higher means
+### under-weighted. Factors with no matched data (e.g. VEGAS/WEATHER for a historical
+### season with no betting_lines/weather_forecasts) report null, not zero.
+GET {{baseUrl}}/api/recommendations/tune-weights?season=2025
+Authorization: Bearer {{accessToken}}
