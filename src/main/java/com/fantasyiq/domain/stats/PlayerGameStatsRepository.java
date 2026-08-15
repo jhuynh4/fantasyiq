@@ -23,4 +23,9 @@ public interface PlayerGameStatsRepository extends JpaRepository<PlayerGameStats
     // No season boundary -- trending is "what's this player's usage doing
     // right now", not tied to a specific week's recommendation.
     List<PlayerGameStats> findTop4ByPlayerOrderByGame_SeasonDescGame_WeekDesc(Player player);
+
+    // Exact-week lookup (not the LessThan trend query above) -- backtesting
+    // needs the player's ACTUAL box score for the specific week a
+    // recommendation was made for, to compare against the predicted score.
+    Optional<PlayerGameStats> findByPlayerAndGame_SeasonAndGame_Week(Player player, Integer season, Integer week);
 }
