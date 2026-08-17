@@ -3,6 +3,7 @@ package com.fantasyiq.ingestion.scheduler;
 import com.fantasyiq.IntegrationTestBase;
 import com.fantasyiq.cache.PlayerCacheService;
 import com.fantasyiq.domain.player.Player;
+import com.fantasyiq.domain.player.PlayerExternalIdRepository;
 import com.fantasyiq.domain.player.PlayerRepository;
 import com.fantasyiq.domain.player.PlayerSnapshot;
 import com.fantasyiq.ingestion.stats.StatsProvider;
@@ -34,6 +35,8 @@ class PlayerIngestionServiceIT extends IntegrationTestBase {
     private PlayerRepository playerRepository;
     @Autowired
     private PlayerCacheService playerCacheService;
+    @Autowired
+    private PlayerExternalIdRepository playerExternalIdRepository;
 
     @Test
     void runningIngestionTwiceDoesNotCreateDuplicatePlayers() {
@@ -57,6 +60,10 @@ class PlayerIngestionServiceIT extends IntegrationTestBase {
         // Delete straight from the DB, bypassing any cache refresh -- if the
         // cache lookup below still finds the player, it can only have come
         // from the population that happened during ingestion itself.
+        // player_external_ids must go first -- it FK-references players,
+        // and this run's own ingestion just created a row there (the ESPN
+        // id reconciled during resolveOrCreateFromEspn).
+        playerExternalIdRepository.deleteAll();
         playerRepository.deleteAll();
 
         PlayerSnapshot cached = playerCacheService.getById(players.get(0).getId());
