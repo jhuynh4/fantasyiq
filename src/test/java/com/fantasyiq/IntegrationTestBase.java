@@ -12,10 +12,13 @@ import com.fantasyiq.domain.stats.WeatherForecastRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.CacheManager;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Base class for integration tests that need a real Postgres instance.
@@ -48,8 +51,15 @@ public abstract class IntegrationTestBase {
                     .withUsername("fantasyiq")
                     .withPassword("fantasyiq");
 
+    // Same never-explicitly-stopped, shared-singleton reasoning as POSTGRES
+    // above -- one Redis instance for the whole test JVM, cleaned up by
+    // Testcontainers' Ryuk reaper at JVM exit.
+    static final GenericContainer<?> REDIS =
+            new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
+
     static {
         POSTGRES.start();
+        REDIS.start();
     }
 
     @DynamicPropertySource
@@ -57,6 +67,12 @@ public abstract class IntegrationTestBase {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+    }
+
+    @DynamicPropertySource
+    static void registerRedisProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
     }
 
     @Autowired
@@ -77,6 +93,8 @@ public abstract class IntegrationTestBase {
     private GameRepository gameRepository;
     @Autowired
     private PlayerRepository playerRepository;
+    @Autowired
+    private CacheManager cacheManager;
 
     /**
      * Now that POSTGRES is a genuinely shared, never-restarted container
@@ -103,5 +121,16 @@ public abstract class IntegrationTestBase {
         playerExternalIdRepository.deleteAll();
         gameRepository.deleteAll();
         playerRepository.deleteAll();
+    }
+
+    /**
+     * Same cross-test-pollution risk the Postgres wipe above already guards
+     * against, but for Redis: REDIS is one shared container for the whole
+     * test JVM, so a cache entry populated by one test class would otherwise
+     * leak into whatever the next test class asserts.
+     */
+    @BeforeEach
+    void clearCachesBeforeEachTest() {
+        cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
     }
 }

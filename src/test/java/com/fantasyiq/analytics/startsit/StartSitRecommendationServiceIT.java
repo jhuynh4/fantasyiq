@@ -1,6 +1,7 @@
 package com.fantasyiq.analytics.startsit;
 
 import com.fantasyiq.IntegrationTestBase;
+import com.fantasyiq.cache.RecommendationCacheService;
 import com.fantasyiq.domain.game.Game;
 import com.fantasyiq.domain.game.GameRepository;
 import com.fantasyiq.domain.player.Player;
@@ -72,6 +73,8 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
     private RecommendationRepository recommendationRepository;
     @Autowired
     private StartSitRecommendationService startSitRecommendationService;
+    @Autowired
+    private RecommendationCacheService recommendationCacheService;
 
     @BeforeEach
     void cleanUp() {
@@ -170,6 +173,23 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
                 .findByPlayerAndSeasonAndWeekAndType(wr, SEASON, TARGET_WEEK, "START_SIT")
                 .orElseThrow();
         assertThat(recommendation.getFactors()).hasSize(1);
+    }
+
+    @Test
+    void computeForWeekPopulatesTheCacheWithoutWaitingForARead() {
+        Team ari = team("ARI");
+        Team sf = team("SF");
+        playerRepository.save(new Player("Cache Warm WR", "WR", ari, 14, "ACTIVE", LocalDate.of(1997, 1, 1)));
+        Game targetGame = saveGame("cache-warm-game", ari, sf, TARGET_WEEK, Instant.parse("2099-09-07T17:00:00Z"));
+        bettingLineReconciliationService.resolveOrCreate(targetGame, ari, new BigDecimal("26.0"),
+                new BigDecimal("-3.5"), new BigDecimal("45.5"), "draftkings");
+
+        startSitRecommendationService.computeForWeek(SEASON, TARGET_WEEK);
+
+        // Deleting straight from the DB, bypassing refreshStartSit entirely --
+        // if the cache still has a row, computeForWeek must have populated it.
+        recommendationRepository.deleteAll();
+        assertThat(recommendationCacheService.getStartSit(SEASON, TARGET_WEEK)).hasSize(1);
     }
 
     private Team team(String abbreviation) {

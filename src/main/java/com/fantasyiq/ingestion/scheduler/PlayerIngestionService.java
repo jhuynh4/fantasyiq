@@ -1,5 +1,7 @@
 package com.fantasyiq.ingestion.scheduler;
 
+import com.fantasyiq.cache.PlayerCacheService;
+import com.fantasyiq.domain.player.Player;
 import com.fantasyiq.domain.player.PlayerReconciliationService;
 import com.fantasyiq.domain.team.Team;
 import com.fantasyiq.domain.team.TeamReconciliationService;
@@ -21,15 +23,18 @@ public class PlayerIngestionService {
     private final TeamReconciliationService teamReconciliationService;
     private final PlayerReconciliationService playerReconciliationService;
     private final IngestionRunService ingestionRunService;
+    private final PlayerCacheService playerCacheService;
 
     public PlayerIngestionService(StatsProvider statsProvider,
                                    TeamReconciliationService teamReconciliationService,
                                    PlayerReconciliationService playerReconciliationService,
-                                   IngestionRunService ingestionRunService) {
+                                   IngestionRunService ingestionRunService,
+                                   PlayerCacheService playerCacheService) {
         this.statsProvider = statsProvider;
         this.teamReconciliationService = teamReconciliationService;
         this.playerReconciliationService = playerReconciliationService;
         this.ingestionRunService = ingestionRunService;
+        this.playerCacheService = playerCacheService;
     }
 
     public int ingestRosters() {
@@ -48,9 +53,10 @@ public class PlayerIngestionService {
         for (Map.Entry<String, Team> entry : teamsByEspnId.entrySet()) {
             List<RawAthlete> athletes = statsProvider.fetchRoster(entry.getKey());
             for (RawAthlete athlete : athletes) {
-                playerReconciliationService.resolveOrCreateFromEspn(
+                Player player = playerReconciliationService.resolveOrCreateFromEspn(
                         athlete.externalId(), athlete.fullName(), athlete.position(),
                         entry.getValue(), athlete.jerseyNumber(), athlete.status(), athlete.birthDate());
+                playerCacheService.refresh(player);
                 playersIngested++;
             }
         }

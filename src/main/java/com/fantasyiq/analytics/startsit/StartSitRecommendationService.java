@@ -7,6 +7,7 @@ import com.fantasyiq.analytics.scoring.RecentPerformanceFactorCalculator;
 import com.fantasyiq.analytics.scoring.UsageTrendFactorCalculator;
 import com.fantasyiq.analytics.scoring.VegasImpliedTotalFactorCalculator;
 import com.fantasyiq.analytics.scoring.WeatherFactorCalculator;
+import com.fantasyiq.cache.RecommendationCacheService;
 import com.fantasyiq.domain.game.Game;
 import com.fantasyiq.domain.game.GameRepository;
 import com.fantasyiq.domain.player.Player;
@@ -60,6 +61,7 @@ public class StartSitRecommendationService {
     private final PlayerGameStatsRepository playerGameStatsRepository;
     private final RecommendationReconciliationService recommendationReconciliationService;
     private final RecommendationRepository recommendationRepository;
+    private final RecommendationCacheService recommendationCacheService;
 
     public StartSitRecommendationService(GameRepository gameRepository, PlayerRepository playerRepository,
                                           DefenseVsPositionStatsRepository defenseVsPositionStatsRepository,
@@ -68,7 +70,8 @@ public class StartSitRecommendationService {
                                           InjuryReportRepository injuryReportRepository,
                                           PlayerGameStatsRepository playerGameStatsRepository,
                                           RecommendationReconciliationService recommendationReconciliationService,
-                                          RecommendationRepository recommendationRepository) {
+                                          RecommendationRepository recommendationRepository,
+                                          RecommendationCacheService recommendationCacheService) {
         this.gameRepository = gameRepository;
         this.playerRepository = playerRepository;
         this.defenseVsPositionStatsRepository = defenseVsPositionStatsRepository;
@@ -78,6 +81,7 @@ public class StartSitRecommendationService {
         this.playerGameStatsRepository = playerGameStatsRepository;
         this.recommendationReconciliationService = recommendationReconciliationService;
         this.recommendationRepository = recommendationRepository;
+        this.recommendationCacheService = recommendationCacheService;
     }
 
     @Transactional
@@ -87,6 +91,7 @@ public class StartSitRecommendationService {
             recommendationsGenerated += scoreTeam(game, game.getHomeTeam(), game.getAwayTeam(), season, week);
             recommendationsGenerated += scoreTeam(game, game.getAwayTeam(), game.getHomeTeam(), season, week);
         }
+        recommendationCacheService.refreshStartSit(season, week);
         return recommendationsGenerated;
     }
 
