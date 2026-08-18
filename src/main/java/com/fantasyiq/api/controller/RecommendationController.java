@@ -5,8 +5,8 @@ import com.fantasyiq.api.dto.BacktestResponse;
 import com.fantasyiq.api.dto.RecommendationGenerateResponse;
 import com.fantasyiq.api.dto.StartSitRecommendationResponse;
 import com.fantasyiq.api.dto.WeightTuningResponse;
-import com.fantasyiq.domain.recommendation.Recommendation;
-import com.fantasyiq.domain.recommendation.RecommendationRepository;
+import com.fantasyiq.cache.RecommendationCacheService;
+import com.fantasyiq.domain.recommendation.RecommendationSnapshot;
 import com.fantasyiq.ingestion.scheduler.BacktestComputationService;
 import com.fantasyiq.ingestion.scheduler.StartSitRecommendationComputationService;
 import org.springframework.http.ResponseEntity;
@@ -23,21 +23,19 @@ import java.util.List;
 @RequestMapping("/api/recommendations")
 public class RecommendationController {
 
-    private static final String START_SIT_TYPE = "START_SIT";
-
     private final StartSitRecommendationComputationService startSitRecommendationComputationService;
     private final BacktestComputationService backtestComputationService;
     private final WeightTuningService weightTuningService;
-    private final RecommendationRepository recommendationRepository;
+    private final RecommendationCacheService recommendationCacheService;
 
     public RecommendationController(StartSitRecommendationComputationService startSitRecommendationComputationService,
                                      BacktestComputationService backtestComputationService,
                                      WeightTuningService weightTuningService,
-                                     RecommendationRepository recommendationRepository) {
+                                     RecommendationCacheService recommendationCacheService) {
         this.startSitRecommendationComputationService = startSitRecommendationComputationService;
         this.backtestComputationService = backtestComputationService;
         this.weightTuningService = weightTuningService;
-        this.recommendationRepository = recommendationRepository;
+        this.recommendationCacheService = recommendationCacheService;
     }
 
     @PostMapping("/generate")
@@ -50,12 +48,11 @@ public class RecommendationController {
     public ResponseEntity<List<StartSitRecommendationResponse>> startSit(
             @RequestParam int season, @RequestParam int week,
             @RequestParam(required = false) String position) {
-        List<Recommendation> recommendations = position != null
-                ? recommendationRepository.findBySeasonAndWeekAndTypeAndPlayer_Position(season, week, START_SIT_TYPE, position)
-                : recommendationRepository.findBySeasonAndWeekAndType(season, week, START_SIT_TYPE);
+        List<RecommendationSnapshot> snapshots = recommendationCacheService.getStartSit(season, week);
 
-        List<StartSitRecommendationResponse> response = recommendations.stream()
-                .sorted(Comparator.comparing(Recommendation::getScore).reversed())
+        List<StartSitRecommendationResponse> response = snapshots.stream()
+                .filter(s -> position == null || position.equals(s.position()))
+                .sorted(Comparator.comparing(RecommendationSnapshot::score).reversed())
                 .map(StartSitRecommendationResponse::from)
                 .toList();
         return ResponseEntity.ok(response);

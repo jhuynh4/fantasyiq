@@ -6,8 +6,10 @@ import com.fantasyiq.api.dto.PlayerDetailResponse;
 import com.fantasyiq.api.dto.PlayerIngestResponse;
 import com.fantasyiq.api.dto.PlayerSummaryResponse;
 import com.fantasyiq.api.dto.PlayerTrendingResponse;
+import com.fantasyiq.cache.PlayerCacheService;
 import com.fantasyiq.domain.player.Player;
 import com.fantasyiq.domain.player.PlayerRepository;
+import com.fantasyiq.domain.player.PlayerSnapshot;
 import com.fantasyiq.domain.stats.PlayerGameStats;
 import com.fantasyiq.domain.stats.PlayerGameStatsRepository;
 import com.fantasyiq.ingestion.scheduler.PlayerIngestionService;
@@ -33,12 +35,15 @@ public class PlayerController {
     private final PlayerIngestionService playerIngestionService;
     private final PlayerRepository playerRepository;
     private final PlayerGameStatsRepository playerGameStatsRepository;
+    private final PlayerCacheService playerCacheService;
 
     public PlayerController(PlayerIngestionService playerIngestionService, PlayerRepository playerRepository,
-                             PlayerGameStatsRepository playerGameStatsRepository) {
+                             PlayerGameStatsRepository playerGameStatsRepository,
+                             PlayerCacheService playerCacheService) {
         this.playerIngestionService = playerIngestionService;
         this.playerRepository = playerRepository;
         this.playerGameStatsRepository = playerGameStatsRepository;
+        this.playerCacheService = playerCacheService;
     }
 
     @PostMapping("/ingest")
@@ -57,10 +62,11 @@ public class PlayerController {
 
     @GetMapping("/{id}")
     public ResponseEntity<PlayerDetailResponse> getById(@PathVariable UUID id) {
-        return playerRepository.findById(id)
-                .map(PlayerDetailResponse::from)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        PlayerSnapshot snapshot = playerCacheService.getById(id);
+        if (snapshot == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(PlayerDetailResponse.from(snapshot));
     }
 
     /**

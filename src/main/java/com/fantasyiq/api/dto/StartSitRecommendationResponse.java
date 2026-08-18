@@ -1,6 +1,6 @@
 package com.fantasyiq.api.dto;
 
-import com.fantasyiq.domain.recommendation.Recommendation;
+import com.fantasyiq.domain.recommendation.RecommendationSnapshot;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -10,13 +10,11 @@ public record StartSitRecommendationResponse(UUID playerId, String playerName, S
                                               BigDecimal score, String confidence,
                                               List<RecommendationFactorResponse> factors) {
 
-    public static StartSitRecommendationResponse from(Recommendation recommendation) {
-        var player = recommendation.getPlayer();
-        String teamAbbreviation = player.getCurrentTeam() != null ? player.getCurrentTeam().getAbbreviation() : null;
-        List<RecommendationFactorResponse> factors = recommendation.getFactors().stream()
+    public static StartSitRecommendationResponse from(RecommendationSnapshot snapshot) {
+        List<RecommendationFactorResponse> factors = snapshot.factors().stream()
                 .map(RecommendationFactorResponse::from)
                 .toList();
-        return new StartSitRecommendationResponse(player.getId(), player.getFullName(), player.getPosition(),
-                teamAbbreviation, recommendation.getScore(), recommendation.getConfidence(), factors);
+        return new StartSitRecommendationResponse(snapshot.playerId(), snapshot.playerName(), snapshot.position(),
+                snapshot.team(), snapshot.score(), snapshot.confidence(), factors);
     }
 }
