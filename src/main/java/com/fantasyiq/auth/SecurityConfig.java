@@ -15,9 +15,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, RateLimitFilter rateLimitFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     @Bean
@@ -28,6 +30,16 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/actuator/health", "/actuator/info").permitAll()
                         .anyRequest().authenticated())
+                // Both anchored against the same well-known Spring Security filter
+                // class -- addFilterBefore/addFilterAfter only accept a class from
+                // Spring Security's own registered filter ordering (FilterOrderRegistration),
+                // not an arbitrary custom filter like JwtAuthenticationFilter itself
+                // (using it as a reference point threw "does not have a registered
+                // order" on startup). Precise relative order between these two
+                // doesn't functionally matter: RateLimitFilter only acts on
+                // /api/auth/**, which JwtAuthenticationFilter doesn't affect either
+                // way (those endpoints are permitAll).
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

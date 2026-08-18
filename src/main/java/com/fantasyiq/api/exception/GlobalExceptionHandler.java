@@ -6,6 +6,7 @@ import com.fantasyiq.auth.InvalidRefreshTokenException;
 import com.fantasyiq.ingestion.odds.OddsUnavailableException;
 import com.fantasyiq.ingestion.stats.EspnUnavailableException;
 import com.fantasyiq.ingestion.weather.WeatherUnavailableException;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,31 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+    }
+
+    /**
+     * Covers @RequestParam/@PathVariable constraint violations (e.g. the
+     * @Min/@Max on season/week params, or PlayerController.search's
+     * pre-existing @NotBlank on q) -- a distinct exception type from
+     * MethodArgumentNotValidException above, which only covers @Valid
+     * @RequestBody. @Validated on a @RestController class routes through
+     * Spring Boot's MethodValidationPostProcessor (an AOP proxy via
+     * MethodValidationInterceptor), which throws jakarta.validation's
+     * ConstraintViolationException directly -- not Spring MVC's newer,
+     * natively-integrated HandlerMethodValidationException, despite the
+     * latter looking like the more obvious fit for @RequestParam. Without
+     * this handler these fell through to the catch-all below and surfaced
+     * as a misleading 500 instead of a 400 -- true for every @RequestParam
+     * constraint in this app, including the pre-existing @NotBlank one,
+     * confirmed live via a real stack trace before assuming which
+     * exception type was actually being thrown.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ProblemDetail handleParameterValidation(ConstraintViolationException ex) {
+        String detail = ex.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
                 .collect(Collectors.joining("; "));
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
     }

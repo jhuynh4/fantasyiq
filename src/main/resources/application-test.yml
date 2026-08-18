@@ -20,6 +20,17 @@ spring:
       maximum-pool-size: 3
       minimum-idle: 1
 
+# Relaxed rate limit so the IT suite's own incidental /api/auth/** traffic
+# (AuthControllerIT alone makes real HTTP calls across its test methods)
+# never trips this -- the filter's actual blocking behavior is covered by
+# RateLimitFilterTest instead, which constructs it directly with a small,
+# explicit capacity rather than depending on this shared value.
+fantasyiq:
+  rate-limit:
+    auth:
+      capacity: 10000
+      period-seconds: 60
+
 logging:
   level:
     com.fantasyiq: INFO
