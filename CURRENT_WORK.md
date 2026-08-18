@@ -1,8 +1,8 @@
 # Current Work
 
-## Status: Redis caching (Phase 4, first slice) built and verified live — ready to push for CI
+## Status: Phase 4 first slice (Redis caching) merged — no active branch
 
-Branch `phase-4/redis-caching` adds a k6 performance baseline plus a Redis cache-aside layer for the two most expensive hot read paths. Built clean via IntelliJ and manually verified against the real running app + real Redis (not just the IT suite) — including three real bugs found and fixed only once tested against a live Redis instance. Not yet committed beyond the baseline; see "What's on this branch" below.
+`phase-4/redis-caching` (k6 baseline + Redis cache-aside layer for start-sit recommendations and player detail) is merged to `main` (PR #14) and the local branch is cleaned up. Everything described below is on `main`.
 
 ## What's been completed (Phases 1-3, all merged to `main`)
 
@@ -12,26 +12,24 @@ Branch `phase-4/redis-caching` adds a k6 performance baseline plus a Redis cache
 
 **Phase 3** — start/sit recommendation engine (6 factors), player trending endpoint, backtest validation, weight tuning + recent-performance factor (took real predictive correlation from `0.0137` to `0.306`). Full writeup in `CLAUDE.md`.
 
-## Phase 4, first slice: Redis caching (branch `phase-4/redis-caching`)
+## Phase 4, first slice: Redis caching (PR #14, merged)
 
-### Baseline (committed as `1dea4ed`)
-
-`scripts/perf/hot-read-paths.js` (k6) hammers a small, fixed set of hot keys at 20 VUs for a minute. Pre-caching baseline saved to `docs/perf/baseline.md`/`.json`.
-
-### Caching layer (built, verified live, not yet committed)
+### Caching layer
 
 - `RedisCacheConfig`, `RecommendationCacheService`, `PlayerCacheService` (new `cache` package) — cache-aside, populated both by the write side right after it commits (`StartSitRecommendationService.computeForWeek` → `refreshStartSit`, `PlayerIngestionService` → `PlayerCacheService.refresh` per athlete) and, as a fallback, by the read side on a genuine cache miss.
 - `RecommendationSnapshot`/`PlayerSnapshot` (new domain records) — flat, cache-friendly values shared between the write side (analytics/ingestion, which can't depend on `api.dto`) and the read side, instead of caching JPA entities or api DTOs directly.
 - `RecommendationController`/`PlayerController` read through the cache now; response DTOs adapted to the snapshot types; one dead repository query method removed (position filtering moved to an in-memory post-cache-read filter).
 - IT wiring: `IntegrationTestBase` now also starts a shared Redis Testcontainer, same pattern as Postgres, plus a per-test cache flush. New `RecommendationCacheServiceIT`/`PlayerCacheServiceIT`, plus one new test each in `StartSitRecommendationServiceIT`/`PlayerIngestionServiceIT` proving the write side actually populates the cache.
 
-### Three real bugs, found only once tested against a real Redis instance
+### Five real bugs found and fixed (three live, two CI-only)
 
-Manual testing against the live app (not just IT tests) caught three real, sequential bugs in the Redis Jackson serializer config — each one only surfaced with a genuine write-then-read round-trip against real Redis:
+Manual testing against the live app plus real CI runs caught bugs invisible to compilation and to any test that mocks the cache layer — a `@Cacheable`/`@CachePut` round-trip against a real serializer is exactly what neither catches without a live Redis:
 
 1. Default `GenericJackson2JsonRedisSerializer` has no `jackson-datatype-jsr310` registered — `PlayerSnapshot.birthDate` (a `LocalDate`) threw on write.
-2. `PlayerCacheService.getById` originally returned `Optional<PlayerSnapshot>` — caching an `Optional` with the Jackson Redis serializer is a known footgun. Fixed by returning a nullable `PlayerSnapshot` and relying on `disableCachingNullValues()`.
-3. The custom `ObjectMapper` used `DefaultTyping.NON_FINAL` instead of `EVERYTHING` — since `PlayerSnapshot`/`RecommendationSnapshot` are Java `record`s (implicitly `final`), `NON_FINAL` silently omitted the `@class` type id on write, causing `InvalidTypeIdException` on the very next read.
+2. Caching `Optional<PlayerSnapshot>` directly is a known Jackson/Redis footgun — fixed by returning a nullable `PlayerSnapshot` instead.
+3. The custom `ObjectMapper` used `DefaultTyping.NON_FINAL` instead of `EVERYTHING` — since `PlayerSnapshot`/`RecommendationSnapshot` are Java `record`s (implicitly `final`), `NON_FINAL` silently omitted the `@class` type id on write, causing `InvalidTypeIdException` on the next read.
+4. `disableCachingNullValues()` doesn't silently skip a null cache write — it throws `IllegalArgumentException`. Needed `unless = "#result == null"` on `getById` so the cache `put` is never attempted for a not-found lookup. This was a real live bug too: `GET /players/{nonexistent-id}` 500'd on the running app before the fix.
+5. A new IT test deleted a player row directly to prove cache-aside behavior, but ingestion had also created a `player_external_ids` row referencing it (FK violation) — same failure mode as manually deleting a reconciled player via `psql` during live testing. Fixed by deleting `player_external_ids` first.
 
 Full root-cause writeup in `CLAUDE.md`'s "Caching" section, including exactly how each was diagnosed (direct `redis-cli`/`psql` checks against the live containers, not guessing).
 
@@ -39,7 +37,7 @@ Full root-cause writeup in `CLAUDE.md`'s "Caching" section, including exactly ho
 
 Confirmed live: a direct `UPDATE players SET status = ...` in Postgres (bypassing the app) followed by a `GET /players/{id}` still returned the pre-mutation cached value — proof the cache is genuinely being read, not silently falling through to the DB every time.
 
-Re-ran the k6 baseline post-caching (`docs/perf/after-caching.md`/`.json`, same fixed keys, same load shape):
+k6 re-run post-caching (`docs/perf/after-caching.md`/`.json`, same fixed keys, same load shape as `docs/perf/baseline.md`/`.json`):
 
 | Endpoint | avg before | avg after | p95 before | p95 after |
 |---|---|---|---|---|
@@ -59,11 +57,13 @@ Total requests completed in the same 80s window: 8,507 → 17,475. The two cache
 
 ## Recommended next steps
 
-1. Commit the caching layer (currently uncommitted on `phase-4/redis-caching`, verified live) and push, let CI verify — the new Testcontainers Redis wiring in `IntegrationTestBase` hasn't been exercised in CI yet, only locally against a real Redis container.
-2. Once merged: either continue Phase 4 (rate limiting, validation) or move to waiver/trade (Phase 5), which reuses the same factor engine now sitting behind a validated cache.
+Two real directions from here, neither started yet:
 
-Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, `phase-2/betting-lines`, `phase-3/start-sit-scoring-engine`, `phase-3/player-trending-endpoint`, and `phase-3/backtest-validation` still exist on origin from prior slices (deferred cleanup, unchanged).
+1. **Finish Phase 4** — Bucket4j rate limiting, broader Bean Validation on request DTOs.
+2. **Move to Phase 5** — waiver-wire/trade analysis, which reuses the same factor engine now sitting behind a validated cache.
+
+Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, `phase-2/betting-lines`, `phase-3/start-sit-scoring-engine`, `phase-3/player-trending-endpoint`, and `phase-3/backtest-validation` still exist on origin from prior slices (deferred cleanup, unchanged). `phase-4/redis-caching` has been deleted both locally and (via the GitHub merge) remotely.
 
 ## No known blockers or in-flight problems
 
-Everything on `main` is merged and CI-verified. `phase-4/redis-caching` is verified live against the real app but not yet through CI — the new Redis Testcontainers wiring is untested in that environment. Local Gradle CLI has been unreliable this session (JVM loopback-socket issue — worked around by building via IntelliJ instead, see `CLAUDE.md`'s "Local environment gotchas").
+Everything on `main` is merged and CI-verified, including the new Redis Testcontainers wiring now exercised in CI. Local Gradle CLI has been unreliable this session (JVM loopback-socket issue — worked around by building via IntelliJ instead, see `CLAUDE.md`'s "Local environment gotchas").
