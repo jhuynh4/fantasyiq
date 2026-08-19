@@ -18,4 +18,10 @@ public interface PlayerRepository extends JpaRepository<Player, UUID> {
     List<Player> search(@Param("query") String query);
 
     List<Player> findByCurrentTeamAndPositionIn(Team currentTeam, Collection<String> positions);
+
+    // Used to compute positional replacement-level baselines for trade
+    // value (analytics.trade.TradeAnalysisService) -- deliberately not
+    // scoped to currentTeam, since a player with no team also naturally
+    // has no game/injury data and gets filtered out of the ranking anyway.
+    List<Player> findByPosition(String position);
 }
