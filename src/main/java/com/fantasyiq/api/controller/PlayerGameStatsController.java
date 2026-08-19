@@ -2,7 +2,9 @@ package com.fantasyiq.api.controller;
 
 import com.fantasyiq.api.dto.GameStatsIngestResponse;
 import com.fantasyiq.ingestion.scheduler.GameStatsIngestionService;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/player-game-stats")
+@Validated
 public class PlayerGameStatsController {
 
     private final GameStatsIngestionService gameStatsIngestionService;
@@ -24,7 +27,7 @@ public class PlayerGameStatsController {
      * the caller must say which season's stats they want.
      */
     @PostMapping("/ingest")
-    public ResponseEntity<GameStatsIngestResponse> ingest(@RequestParam int season) {
+    public ResponseEntity<GameStatsIngestResponse> ingest(@RequestParam @Min(1) int season) {
         GameStatsIngestionService.IngestGameStatsResult result = gameStatsIngestionService.ingestGameStats(season);
         return ResponseEntity.ok(new GameStatsIngestResponse(
                 result.playersConsidered(), result.playersWithEspnId(), result.rawStatLinesFetched(),

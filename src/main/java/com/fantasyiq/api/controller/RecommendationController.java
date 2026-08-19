@@ -9,7 +9,10 @@ import com.fantasyiq.cache.RecommendationCacheService;
 import com.fantasyiq.domain.recommendation.RecommendationSnapshot;
 import com.fantasyiq.ingestion.scheduler.BacktestComputationService;
 import com.fantasyiq.ingestion.scheduler.StartSitRecommendationComputationService;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +24,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/recommendations")
+@Validated
 public class RecommendationController {
 
     private final StartSitRecommendationComputationService startSitRecommendationComputationService;
@@ -39,14 +43,15 @@ public class RecommendationController {
     }
 
     @PostMapping("/generate")
-    public ResponseEntity<RecommendationGenerateResponse> generate(@RequestParam int season, @RequestParam int week) {
+    public ResponseEntity<RecommendationGenerateResponse> generate(
+            @RequestParam @Min(1) int season, @RequestParam @Min(1) @Max(18) int week) {
         int recommendationsGenerated = startSitRecommendationComputationService.computeForWeek(season, week);
         return ResponseEntity.ok(new RecommendationGenerateResponse(recommendationsGenerated));
     }
 
     @GetMapping("/start-sit")
     public ResponseEntity<List<StartSitRecommendationResponse>> startSit(
-            @RequestParam int season, @RequestParam int week,
+            @RequestParam @Min(1) int season, @RequestParam @Min(1) @Max(18) int week,
             @RequestParam(required = false) String position) {
         List<RecommendationSnapshot> snapshots = recommendationCacheService.getStartSit(season, week);
 
@@ -59,12 +64,12 @@ public class RecommendationController {
     }
 
     @PostMapping("/backtest")
-    public ResponseEntity<BacktestResponse> backtest(@RequestParam int season) {
+    public ResponseEntity<BacktestResponse> backtest(@RequestParam @Min(1) int season) {
         return ResponseEntity.ok(BacktestResponse.from(backtestComputationService.runBacktest(season)));
     }
 
     @GetMapping("/tune-weights")
-    public ResponseEntity<WeightTuningResponse> tuneWeights(@RequestParam int season) {
+    public ResponseEntity<WeightTuningResponse> tuneWeights(@RequestParam @Min(1) int season) {
         return ResponseEntity.ok(WeightTuningResponse.from(weightTuningService.analyzeWeights(season)));
     }
 }

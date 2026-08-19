@@ -41,6 +41,10 @@ fantasyiq:
     secret: ${JWT_SECRET:change-me-in-every-real-environment-this-is-local-only}
     access-token-ttl-minutes: 15
     refresh-token-ttl-days: 30
+  rate-limit:
+    auth:
+      capacity: 10
+      period-seconds: 60
 
 resilience4j:
   retry:
