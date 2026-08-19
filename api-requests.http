@@ -174,3 +174,18 @@ Authorization: Bearer {{accessToken}}
 ### season with no betting_lines/weather_forecasts) report null, not zero.
 GET {{baseUrl}}/api/recommendations/tune-weights?season=2025
 Authorization: Bearer {{accessToken}}
+
+### Trade analysis: rest-of-season value comparison for two player sets (requires
+### auth; no external call, computed fresh per request -- not cached/persisted).
+### Uses only the three factors that don't depend on a specific future opponent
+### (RECENT_PERFORMANCE/USAGE/INJURY) plus a positional replacement-level
+### adjustment. Sides can be uneven sizes (2-for-1 etc.) -- replace the ids below
+### with real ones from /api/players/search. 404s if any player id doesn't exist.
+POST {{baseUrl}}/api/trades/analyze
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "sideAPlayerIds": ["00000000-0000-0000-0000-000000000000"],
+  "sideBPlayerIds": ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"]
+}

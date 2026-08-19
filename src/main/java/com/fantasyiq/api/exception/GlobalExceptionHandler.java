@@ -5,6 +5,7 @@ import com.fantasyiq.auth.InvalidCredentialsException;
 import com.fantasyiq.auth.InvalidRefreshTokenException;
 import com.fantasyiq.ingestion.odds.OddsUnavailableException;
 import com.fantasyiq.ingestion.stats.EspnUnavailableException;
+import com.fantasyiq.domain.player.PlayerNotFoundException;
 import com.fantasyiq.ingestion.weather.WeatherUnavailableException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -30,6 +31,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({InvalidCredentialsException.class, InvalidRefreshTokenException.class})
     public ProblemDetail handleUnauthorized(RuntimeException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    @ExceptionHandler(PlayerNotFoundException.class)
+    public ProblemDetail handlePlayerNotFound(PlayerNotFoundException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
     /**
