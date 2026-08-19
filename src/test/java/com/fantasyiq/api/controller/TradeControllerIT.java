@@ -89,8 +89,11 @@ class TradeControllerIT extends IntegrationTestBase {
         Team ari = teamRepository.findByAbbreviation("ARI").orElseThrow();
         Team sf = teamRepository.findByAbbreviation("SF").orElseThrow();
         Player player = playerRepository.save(new Player(name, "WR", ari, jerseyCounter++, "ACTIVE", LocalDate.of(1998, 1, 1)));
+        // external_ref is VARCHAR(50) -- a longer prefix here overflowed it
+        // (caught in CI, not locally): "trade-controller-it-" + a full UUID
+        // is 57 chars.
         Game game = gameRepository.save(new Game(
-                "trade-controller-it-" + UUID.randomUUID(), 2093, 1, ari, sf, Instant.parse("2093-09-07T17:00:00Z"),
+                "tc-it-" + UUID.randomUUID(), 2093, 1, ari, sf, Instant.parse("2093-09-07T17:00:00Z"),
                 "Test Stadium", "FINAL"));
         playerGameStatsRepository.save(new PlayerGameStats(player, game, ari, 5, 4, 40, 0, 0, null, null, null, null,
                 null, 0, fantasyPointsPpr, fantasyPointsPpr));
