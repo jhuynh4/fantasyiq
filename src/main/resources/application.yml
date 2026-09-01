@@ -20,6 +20,17 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  metrics:
+    distribution:
+      # Client-side percentiles, not percentiles-histogram -- this is a
+      # single-instance deployment (see docs/development-plan.md, Phase 7
+      # is the first mention of running more than one), so there's no
+      # cross-instance aggregation to get wrong, and skipping histogram
+      # buckets avoids their extra cardinality/storage cost for no benefit
+      # yet. Revisit if this ever runs behind a load balancer.
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+        ingestion.run.duration: 0.5, 0.95, 0.99
 
 # Feature-team-owned config: external provider settings.
 # Real values (keys) come from env vars — never commit real secrets.
