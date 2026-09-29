@@ -16,6 +16,12 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
+variable "app_port" {
+  description = "Port the Spring Boot app listens on inside the container."
+  type        = number
+  default     = 8080
+}
+
 variable "az_count" {
   description = "Number of availability zones to spread subnets across. An ALB and an RDS subnet group each require at least 2."
   type        = number
