@@ -27,3 +27,33 @@ variable "az_count" {
   type        = number
   default     = 2
 }
+
+variable "db_instance_class" {
+  description = "RDS instance size. t4g (Graviton/ARM) is cheaper than t3 for the same size -- worth it here since nothing in this stack needs x86."
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_name" {
+  description = "Database name Flyway migrates against -- matches docker-compose's local Postgres."
+  type        = string
+  default     = "fantasyiq"
+}
+
+variable "db_username" {
+  description = "Master username. The password is never set here -- manage_master_user_password lets RDS generate and own it in Secrets Manager instead."
+  type        = string
+  default     = "fantasyiq"
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache node size."
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "app_image_tag" {
+  description = "Docker image tag in ECR to deploy. Matches the tag already pushed by hand; the later CI/CD pipeline will manage this differently (tagging with the git commit SHA)."
+  type        = string
+  default     = "manual-1"
+}
