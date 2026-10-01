@@ -53,7 +53,13 @@ variable "redis_node_type" {
 }
 
 variable "app_image_tag" {
-  description = "Docker image tag in ECR to deploy. Matches the tag already pushed by hand; the later CI/CD pipeline will manage this differently (tagging with the git commit SHA)."
+  description = "Docker image tag in ECR to deploy. Matches the tag already pushed by hand; the CI/CD pipeline manages this differently (tagging with the git commit SHA) once it takes over deploys."
   type        = string
   default     = "manual-1"
+}
+
+variable "github_repo" {
+  description = "owner/repo, used to scope the GitHub Actions OIDC trust policy to this exact repository."
+  type        = string
+  default     = "jhuynh4/fantasyiq"
 }
