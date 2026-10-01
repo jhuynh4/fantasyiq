@@ -41,6 +41,18 @@ jobs:
       # or more security-sensitive scale than a solo learning project.
       - uses: actions/checkout@v4
 
+      # TEMPORARY -- prints the OIDC token's actual claims (sub, aud, etc.)
+      # so we can see exactly what GitHub sends for this real push-to-main
+      # trigger, rather than trust what the docs say the format should be.
+      # The AWS step below is still expected to fail while this is here;
+      # remove this step once the trust policy's sub condition is confirmed
+      # to match reality.
+      - name: DEBUG - print OIDC token claims
+        run: |
+          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          echo "$TOKEN" | cut -d'.' -f2 | base64 -d 2>/dev/null | jq .
+
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
