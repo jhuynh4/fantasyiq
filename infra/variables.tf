@@ -81,3 +81,8 @@ variable "github_repo_id" {
   type        = string
   default     = "1324571292"
 }
+
+variable "alert_email" {
+  description = "Email address subscribed to CloudWatch alarm notifications. No default on purpose -- supply via TF_VAR_alert_email or a gitignored terraform.tfvars, the same \"you provide it, never through this code or chat\" rule already used for the external API keys."
+  type        = string
+}
