@@ -1,0 +1,100 @@
+name: Deploy
+
+# Runs after a merge lands on main, not on every PR -- ci.yml already gates
+# merges on tests passing (branch protection requires that check), so a
+# commit reaching this workflow has already been verified. This workflow's
+# job is strictly build-image -> push -> deploy, not re-running the suite.
+on:
+  push:
+    branches: [main]
+
+# id-token: write is what lets this workflow request an OIDC token from
+# GitHub and exchange it for short-lived AWS credentials -- without it,
+# aws-actions/configure-aws-credentials has nothing to authenticate with.
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: fantasyiq
+  ECS_CLUSTER: fantasyiq
+  ECS_SERVICE: fantasyiq
+  ECS_TASK_DEFINITION_FAMILY: fantasyiq
+  CONTAINER_NAME: app
+  # Deterministic (a fixed IAM role name, not a generated id), so this
+  # stays correct across a `terraform destroy` + `apply` cycle without
+  # needing to be updated here -- see infra/github-oidc.tf's own comment
+  # on why this ARN doesn't change.
+  DEPLOY_ROLE_ARN: arn:aws:iam::018326344181:role/fantasyiq-github-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions below are pinned to major-version tags (@v4 etc),
+      # not full commit SHAs. Pinning to a SHA is the more hardened choice
+      # (immune to a tag being moved to different, possibly malicious code
+      # after the fact) and is what GitHub's own ECS deployment docs do --
+      # a reasonable upgrade later, not done here since it trades away
+      # readability for a security margin that matters more at a larger
+      # or more security-sensitive scale than a solo learning project.
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Tagged with the commit SHA, not "latest" -- ECR's tags are
+      # immutable (see infra/ecr.tf), and a SHA tag makes every deployed
+      # image traceable back to the exact commit that produced it.
+      - name: Build and push the image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      # Fetches the live task definition rather than checking a static
+      # task-definition.json into the repo (GitHub's own example does the
+      # latter) -- this project's task definition content (cpu/memory/
+      # secrets/env vars) is already fully owned by Terraform (infra/ecs.tf).
+      # A second, repo-committed copy would be a second source of truth
+      # that could silently drift from what Terraform actually applies.
+      # amazon-ecs-render-task-definition patches a local copy of whichever
+      # one it's given rather than AWS itself, so the current definition
+      # has to be downloaded first either way.
+      - name: Fetch the current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_DEFINITION_FAMILY" \
+            --query taskDefinition > task-definition.json
+
+      - name: Update the task definition with the new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      # wait-for-service-stability blocks until ECS reports the new
+      # deployment's tasks passing their health checks -- this workflow
+      # only reports success once the new version is genuinely serving
+      # traffic, not just once the API call to update it was accepted.
+      - name: Deploy the new task definition to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

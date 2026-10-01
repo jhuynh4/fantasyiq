@@ -46,3 +46,8 @@ output "app_url" {
   description = "The app's public URL, once the ECS service is healthy behind it."
   value       = "http://${aws_lb.main.dns_name}"
 }
+
+output "github_actions_role_arn" {
+  description = "Referenced directly in .github/workflows/deploy.yml -- stable across applies since it's a deterministic name, not a generated id."
+  value       = aws_iam_role.github_actions_deploy.arn
+}
