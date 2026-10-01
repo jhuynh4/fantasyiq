@@ -58,8 +58,26 @@ variable "app_image_tag" {
   default     = "manual-1"
 }
 
-variable "github_repo" {
-  description = "owner/repo, used to scope the GitHub Actions OIDC trust policy to this exact repository."
+variable "github_repo_owner" {
+  description = "GitHub username/org -- used alongside its numeric id below to build the OIDC trust policy's sub condition."
   type        = string
-  default     = "jhuynh4/fantasyiq"
+  default     = "jhuynh4"
+}
+
+variable "github_repo_owner_id" {
+  description = "GitHub's numeric account id for github_repo_owner -- see github-oidc.tf's comment on why both the name and the numeric id are needed (GitHub's \"immutable subject claims\" format). Found via a real decoded OIDC token (the `repository_owner_id` claim), not GitHub's UI -- there's no simple page that shows this number."
+  type        = string
+  default     = "113395047"
+}
+
+variable "github_repo_name" {
+  description = "Repository name (without the owner)."
+  type        = string
+  default     = "fantasyiq"
+}
+
+variable "github_repo_id" {
+  description = "GitHub's numeric id for this repository -- see github_repo_owner_id's comment; found the same way (the `repository_id` claim)."
+  type        = string
+  default     = "1324571292"
 }

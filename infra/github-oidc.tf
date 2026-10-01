@@ -32,10 +32,21 @@ data "aws_iam_policy_document" "github_actions_assume" {
     # Scoped to this exact repo and only the main branch -- a workflow run
     # from a fork, a feature branch, or a pull_request event can't assume
     # this role, only a push that landed on main.
+    #
+    # The format below embeds the numeric owner/repo ids alongside the
+    # names (GitHub's newer "immutable subject claims" format, which this
+    # repo has -- a rename of the repo or the account later won't break
+    # this trust policy, unlike the plain repo:owner/name:ref:... format
+    # most docs/tutorials still show). Confirmed against a real decoded
+    # token during setup, not assumed from documentation -- the plain
+    # format silently failed with "Not authorized to perform
+    # sts:AssumeRoleWithWebIdentity" even though the role/policy were
+    # otherwise correct, since AWS was comparing against a sub value
+    # GitHub was never actually sending.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:ref:refs/heads/main"]
+      values   = ["repo:${var.github_repo_owner}@${var.github_repo_owner_id}/${var.github_repo_name}@${var.github_repo_id}:ref:refs/heads/main"]
     }
   }
 }
