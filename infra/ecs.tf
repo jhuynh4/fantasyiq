@@ -95,6 +95,15 @@ resource "aws_ecs_service" "app" {
     container_port   = var.app_port
   }
 
+  # Without this, the ALB starts counting failed health checks the instant
+  # the task registers -- well before the JVM is listening. Real boot time
+  # on Fargate measured at ~80-90s (Started FantasyIqApplication in 88.605
+  # seconds), close enough to the target group's 3-failure/30s-interval
+  # window (~90s) that every task was getting killed and replaced seconds
+  # before it would have gone healthy -- a self-inflicted crash loop, not
+  # an app bug. 180s gives real margin above the observed worst case.
+  health_check_grace_period_seconds = 180
+
   # Without this, Terraform could create the service before the listener
   # exists to route traffic to it -- not fatal (ECS would just retry failed
   # health checks until the listener catches up), but a cleaner apply order.

@@ -51,3 +51,8 @@ output "github_actions_role_arn" {
   description = "Referenced directly in .github/workflows/deploy.yml -- stable across applies since it's a deterministic name, not a generated id."
   value       = aws_iam_role.github_actions_deploy.arn
 }
+
+output "dashboard_url" {
+  description = "Direct link to the CloudWatch dashboard."
+  value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.main.dashboard_name}"
+}
