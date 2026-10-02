@@ -1,8 +1,10 @@
 # Current Work
 
-## Status: Phase 7 fully complete — infrastructure and CI/CD pipeline both proven live, then torn down
+## Status: Phases 1-7 all complete and merged — pausing before Phase 8 (frontend) to review
 
-All of Phase 7 is merged to `main` (PRs #18-25) and proven against a real AWS account end to end, twice: once for the infrastructure alone, and again after adding the GitHub Actions deploy pipeline. A real `git push` → merge to `main` now genuinely builds the image, pushes it to ECR, and redeploys ECS automatically, with ECS confirming the new version healthy before the pipeline reports success. Everything was `terraform destroy`'d afterward (45 resources) to stop billing — **nothing is currently running in AWS**. All of the infrastructure and pipeline code is real, complete, and already proven; bringing it back is just `terraform apply`.
+All of Phase 7 is merged to `main` (PRs #18-25) and proven against a real AWS account end to end. Phase 6's closing slice (CloudWatch dashboard, 4 alarms, a runbook) is also now merged, proven against a real live deployment. A real `git push` → merge to `main` genuinely builds the image, pushes it to ECR, and redeploys ECS automatically, with ECS confirming the new version healthy before the pipeline reports success. Everything was `terraform destroy`'d afterward (45 resources) to stop billing — **nothing is currently running in AWS**. All of the infrastructure, pipeline, and observability code is real, complete, and already proven; bringing it back is just `terraform apply`.
+
+The backend (Phases 1-7) is functionally done. Deliberately pausing before Phase 8 (frontend) to review the whole backend + cloud integration rather than context-switching straight into new work.
 
 ## What's been completed (Phases 1-6, all merged to `main`)
 
@@ -17,6 +19,8 @@ All of Phase 7 is merged to `main` (PRs #18-25) and proven against a real AWS ac
 **Phase 5, first slice** — trade analyzer (`POST /api/trades/analyze`): rest-of-season value comparison reusing three of the six factor calculators plus a positional replacement-level adjustment. ~3.3s per request (known, deliberately-accepted N+1 cost), not batched yet.
 
 **Phase 6, first slice** — Micrometer instrumentation for ingestion job duration/success (`ingestion.run.duration`, tagged by source/outcome). Request latency, cache hit ratio, and external API error rate turned out to already be auto-instrumented for free — confirmed live rather than assumed.
+
+**Phase 6, closing slice** — CloudWatch dashboard (5 widgets: ALB requests/5xx, response time p95, ECS CPU/memory, RDS CPU/connections, healthy/unhealthy hosts) and 4 alarms (ALB 5xx rate, unhealthy hosts, ECS CPU, RDS CPU) via SNS email, plus one real runbook (`docs/runbooks/injury-ingestion-failure.md`). Log shipping turned out to already be done (the ECS task's `awslogs` driver). Deliberately scoped to native AWS metrics only — the dev plan's "ingestion job failure" and "circuit breaker open" alarms need an app-level Micrometer→CloudWatch bridge, not built yet (see "What remains" below). **Verifying this live surfaced a real bug**: `aws_ecs_service` had no `health_check_grace_period_seconds`, so the ALB was killing every task ~10 seconds before it finished its ~90s boot, a self-inflicted crash loop. Fixed (`180s` grace period), confirmed live.
 
 Full writeups for all of the above in `CLAUDE.md`.
 
@@ -40,19 +44,24 @@ Full design rationale for all of Phase 7, including the complete OIDC debugging 
 
 ## What remains (lower priority, not blocking)
 
-- The CloudWatch-dashboard/alarms half of Phase 6 — genuinely doable for the first time now that Phase 7's infrastructure exists, but needs the app actually running continuously to have anything to watch
+- **App-level Micrometer→CloudWatch metrics bridge** — the dev plan's "ingestion job failure" and "circuit breaker open" alarms aren't implemented; only native-AWS-metric alarms exist (5xx rate, CPU, unhealthy hosts). Needs `micrometer-registry-cloudwatch2` + a new IAM task role (distinct from the execution role — the app's own code would need to call CloudWatch directly for the first time).
+- **Waiver-wire analyzer** — `analytics/waiver`/`ingestion/trending` are still empty `package-info.java` placeholders. Original scope was start/sit + waiver + trade; only start/sit and trade got built.
+- **K/DST position support** — ESPN's gamelog endpoint only covers QB/RB/WR/TE; needs a different team-level endpoint, never built.
+- **HTTPS** — ALB is HTTP-only; needs a real domain + ACM cert before real users.
 - Trade analyzer performance (N+1 query pattern in `computeReplacementLevels`, ~3.3s per request) — not urgent, occasional endpoint
 - WireMock contract test coverage for `EspnInjuryProvider` (the only adapter without one)
 - Backtest performance (N+1 query pattern inside `gatherFactors`, ~18 min for a full season) — not urgent, occasional endpoint
 - `MatchupFactorCalculator`'s long-run uniform averaging and the weak `USAGE` factor remain real, un-investigated hypotheses if further model improvement is wanted later
+- `README.md`/`docs/` still frozen at Phase 0, never kept in sync with reality
 
 ## Recommended next steps
 
-Phase 7 is done. Three real directions from here, none started yet:
+Phases 1-7 are done. Currently pausing deliberately to review the whole backend + cloud integration before starting anything new — not a blocker, a chosen checkpoint. After that, the real remaining directions are:
 
-1. **Finish Phase 6** — CloudWatch dashboard + alarms (job failure, elevated error rate, circuit breaker trips) + a runbook doc, now that there's real infrastructure to point them at.
-2. **Batch the trade analyzer's replacement-level computation** if the 3.3s cost turns out to matter in practice.
-3. **Phase 8** — frontend, lower priority per the dev plan, likely follows Phase 7.
+1. **Phase 8** — frontend. The big one; nothing built yet.
+2. **The app-level metrics bridge** — closes out the dev plan's Phase 6 checklist fully (job-failure/circuit-breaker alarms).
+3. **Waiver analyzer** — the one analytics feature from the original three-feature scope (start/sit, waiver, trade) not yet built.
+4. Smaller polish items — batch the trade analyzer's replacement-level computation, K/DST support, HTTPS, the missing `EspnInjuryProvider` contract test.
 
 Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, `phase-2/betting-lines`, `phase-3/start-sit-scoring-engine`, `phase-3/player-trending-endpoint`, and `phase-3/backtest-validation` still exist on origin from prior slices (deferred cleanup, unchanged). All Phase 7 branches have been deleted both locally and remotely.
 
