@@ -26,6 +26,28 @@ resource "aws_secretsmanager_secret_version" "jwt_secret" {
   secret_string = random_password.jwt_secret.result
 }
 
+# The password for the admin account AdminBootstrap creates on the app's first
+# startup. Generated here rather than left as a REPLACE_ME placeholder like the
+# vendor keys below, deliberately: a placeholder that never got replaced would
+# become the live admin password behind a public load balancer. Retrieve it with
+# `aws secretsmanager get-secret-value` (see the admin_password_secret_name
+# output). Every fresh apply recreates both this and the database, so the admin
+# account and its password are recreated together.
+resource "random_password" "admin_password" {
+  length  = 24
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "admin_password" {
+  name                    = "${var.project}/admin-password"
+  recovery_window_in_days = 0 # see jwt_secret's comment above -- same reasoning
+}
+
+resource "aws_secretsmanager_secret_version" "admin_password" {
+  secret_id     = aws_secretsmanager_secret.admin_password.id
+  secret_string = random_password.admin_password.result
+}
+
 # OPENWEATHER_API_KEY / ODDS_API_KEY are real vendor credentials, not
 # something Terraform should generate or this file should ever contain.
 # These resources only provision the empty container; the real value goes

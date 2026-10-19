@@ -12,7 +12,7 @@
     </springProfile>
 
     <!-- Everywhere else: structured JSON, one line per event, with the
-         per-ingestion-run correlationId (see IngestionScheduler) included
+         per-ingestion-run correlationId (see IngestionRunService) included
          so logs from a single run can be filtered as one unit. -->
     <springProfile name="!local">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

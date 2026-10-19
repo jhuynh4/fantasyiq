@@ -29,14 +29,16 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_managed" {
 }
 
 # The managed policy above doesn't cover Secrets Manager -- scoped to
-# exactly the four secrets this task actually reads, not a blanket
-# secretsmanager:* grant.
+# exactly the five secrets this task actually reads, not a blanket
+# secretsmanager:* grant. Every secret referenced in ecs.tf's `secrets` block
+# must be listed here, or ECS can't fetch it and the task never starts.
 data "aws_iam_policy_document" "ecs_task_execution_secrets" {
   statement {
     actions = ["secretsmanager:GetSecretValue"]
     resources = [
       aws_db_instance.main.master_user_secret[0].secret_arn,
       aws_secretsmanager_secret.jwt_secret.arn,
+      aws_secretsmanager_secret.admin_password.arn,
       aws_secretsmanager_secret.openweather_api_key.arn,
       aws_secretsmanager_secret.odds_api_key.arn,
     ]

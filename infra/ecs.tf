@@ -7,15 +7,15 @@ resource "aws_ecs_cluster" "main" {
   name = var.project
 }
 
-# Reuses exactly the env-var-override pattern already verified when testing
-# the Dockerfile locally against docker-compose's Postgres/Redis
-# (SPRING_DATASOURCE_URL / SPRING_DATA_REDIS_HOST env vars override
-# application-local.yml's hardcoded local values) -- same mechanism, now
-# pointed at RDS/ElastiCache instead of local containers. SPRING_PROFILES_ACTIVE
-# stays "local" rather than introducing a new profile for this first slice;
-# the local profile's DEBUG-level logging is noisier than you'd want for
-# real production traffic, a known simplification worth revisiting if this
-# ever serves real users instead of being a learning/demo deployment.
+# Reuses the env-var-override pattern already verified when testing the
+# Dockerfile locally against docker-compose's Postgres/Redis -- every
+# connection setting arrives as an environment variable, now pointed at
+# RDS/ElastiCache instead of local containers. The "aws" profile (see
+# application-aws.yml) replaces the earlier reuse of "local": it carries only
+# the JPA/Flyway settings "local" used to supply implicitly, and not being
+# "local" is what turns on JSON logs (with the ingestion correlationId) at INFO
+# instead of plain-text DEBUG logging every SQL statement. The datasource
+# username used to come from application-local.yml; it's explicit here now.
 resource "aws_ecs_task_definition" "app" {
   family                   = var.project
   requires_compatibilities = ["FARGATE"]
@@ -43,19 +43,22 @@ resource "aws_ecs_task_definition" "app" {
       ]
 
       environment = [
-        { name = "SPRING_PROFILES_ACTIVE", value = "local" },
+        { name = "SPRING_PROFILES_ACTIVE", value = "aws" },
         { name = "SPRING_DATASOURCE_URL", value = "jdbc:postgresql://${aws_db_instance.main.endpoint}/${var.db_name}" },
+        { name = "SPRING_DATASOURCE_USERNAME", value = var.db_username },
         { name = "SPRING_DATA_REDIS_HOST", value = aws_elasticache_cluster.main.cache_nodes[0].address },
+        { name = "ADMIN_EMAIL", value = var.admin_email },
       ]
 
       # RDS's own secret stores {"username":"...","password":"..."} as one
       # JSON blob -- the ":password::" suffix tells Secrets Manager which
       # key to extract (the trailing empty segments are the optional
       # version-stage/version-id AWS's ARN format reserves). The other
-      # three secrets are plain strings, so no key suffix is needed.
+      # other four secrets are plain strings, so no key suffix is needed.
       secrets = [
         { name = "SPRING_DATASOURCE_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
         { name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
+        { name = "ADMIN_PASSWORD", valueFrom = aws_secretsmanager_secret.admin_password.arn },
         { name = "OPENWEATHER_API_KEY", valueFrom = aws_secretsmanager_secret.openweather_api_key.arn },
         { name = "ODDS_API_KEY", valueFrom = aws_secretsmanager_secret.odds_api_key.arn },
       ]

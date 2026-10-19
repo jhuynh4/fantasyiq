@@ -1,0 +1,19 @@
+# Profile for the deployed (ECS) app. Everything environment-specific comes in as
+# environment variables set on the task -- SPRING_DATASOURCE_URL/USERNAME/PASSWORD,
+# SPRING_DATA_REDIS_HOST, JWT_SECRET, ADMIN_EMAIL/ADMIN_PASSWORD and the vendor API
+# keys -- so this file only carries what application-local.yml would otherwise have
+# supplied implicitly. Not activating "local" here is also what switches
+# logback-spring.xml to JSON output (with the ingestion correlationId) and keeps
+# logging at INFO instead of DEBUG with every SQL statement.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate # schema is owned by Flyway migrations, never Hibernate auto-DDL
+    open-in-view: false # services/controllers rely on EAGER fetches, not a request-wide session
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    com.fantasyiq: INFO
