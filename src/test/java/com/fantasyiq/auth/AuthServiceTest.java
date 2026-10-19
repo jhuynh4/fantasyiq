@@ -52,7 +52,7 @@ class AuthServiceTest {
     void registerHashesThePasswordBeforeSaving() {
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed-password");
-        when(jwtService.generateAccessToken(any(), anyString())).thenReturn("access-token");
+        when(jwtService.generateAccessToken(any(), anyString(), any())).thenReturn("access-token");
 
         authService.register("new@fantasyiq.dev", "password123", "Name");
 

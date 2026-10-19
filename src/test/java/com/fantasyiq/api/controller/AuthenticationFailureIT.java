@@ -3,6 +3,7 @@ package com.fantasyiq.api.controller;
 import com.fantasyiq.IntegrationTestBase;
 import com.fantasyiq.auth.JwtProperties;
 import com.fantasyiq.auth.JwtService;
+import com.fantasyiq.auth.UserRole;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +55,8 @@ class AuthenticationFailureIT extends IntegrationTestBase {
     void requestWithAnExpiredTokenIsUnauthorized() throws Exception {
         JwtService expiringImmediately = new JwtService(
                 new JwtProperties(jwtProperties.secret(), -1, jwtProperties.refreshTokenTtlDays()));
-        String expiredToken = expiringImmediately.generateAccessToken(UUID.randomUUID(), "expired@fantasyiq.dev");
+        String expiredToken = expiringImmediately.generateAccessToken(
+                UUID.randomUUID(), "expired@fantasyiq.dev", UserRole.USER);
 
         mockMvc.perform(get(PROTECTED_PATH).header("Authorization", "Bearer " + expiredToken))
                 .andExpect(status().isUnauthorized());

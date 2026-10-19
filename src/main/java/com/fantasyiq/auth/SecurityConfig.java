@@ -2,6 +2,7 @@ package com.fantasyiq.auth;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -17,12 +18,14 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitFilter rateLimitFilter;
     private final UnauthorizedEntryPoint unauthorizedEntryPoint;
+    private final ForbiddenHandler forbiddenHandler;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, RateLimitFilter rateLimitFilter,
-                          UnauthorizedEntryPoint unauthorizedEntryPoint) {
+                          UnauthorizedEntryPoint unauthorizedEntryPoint, ForbiddenHandler forbiddenHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.rateLimitFilter = rateLimitFilter;
         this.unauthorizedEntryPoint = unauthorizedEntryPoint;
+        this.forbiddenHandler = forbiddenHandler;
     }
 
     @Bean
@@ -30,9 +33,24 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(handling -> handling.authenticationEntryPoint(unauthorizedEntryPoint))
+                .exceptionHandling(handling -> handling
+                        .authenticationEntryPoint(unauthorizedEntryPoint)
+                        .accessDeniedHandler(forbiddenHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/actuator/health", "/actuator/info").permitAll()
+                        // The endpoints that start ingestion, scoring or a backtest --
+                        // they change data or take real time, so they're operator
+                        // tools, not something any registered user should trigger.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/players/ingest",
+                                "/api/games/ingest",
+                                "/api/injuries/ingest",
+                                "/api/player-game-stats/ingest",
+                                "/api/weather/ingest",
+                                "/api/odds/ingest",
+                                "/api/defense-vs-position/compute",
+                                "/api/recommendations/generate",
+                                "/api/recommendations/backtest").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // Both anchored against the same well-known Spring Security filter
                 // class -- addFilterBefore/addFilterAfter only accept a class from

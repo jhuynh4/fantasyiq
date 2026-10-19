@@ -73,7 +73,7 @@ public class AuthService {
     }
 
     private AuthTokens issueTokens(User user) {
-        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail());
+        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
         String rawRefreshToken = generateRawToken();
         Instant expiresAt = Instant.now().plus(jwtProperties.refreshTokenTtlDays(), ChronoUnit.DAYS);
         refreshTokenRepository.save(new RefreshToken(user, hash(rawRefreshToken), expiresAt));
