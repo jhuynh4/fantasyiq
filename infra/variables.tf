@@ -82,6 +82,12 @@ variable "github_repo_id" {
   default     = "1324571292"
 }
 
+variable "admin_email" {
+  description = "Login id of the admin account the app creates on its first startup (see AdminBootstrap). It's only an identifier -- nothing is ever emailed to it -- so a non-personal default is fine; the password is a Terraform-generated secret, not a variable."
+  type        = string
+  default     = "admin@fantasyiq.dev"
+}
+
 variable "alert_email" {
   description = "Email address subscribed to CloudWatch alarm notifications. No default on purpose -- supply via TF_VAR_alert_email or a gitignored terraform.tfvars, the same \"you provide it, never through this code or chat\" rule already used for the external API keys."
   type        = string

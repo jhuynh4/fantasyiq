@@ -2,10 +2,13 @@ package com.fantasyiq.ingestion.scheduler;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
@@ -34,6 +37,8 @@ import java.util.function.ToIntFunction;
 @Service
 public class IngestionRunService {
 
+    private static final Logger log = LoggerFactory.getLogger(IngestionRunService.class);
+
     private static final String MDC_KEY = "correlationId";
     private static final String METRIC_NAME = "ingestion.run.duration";
 
@@ -51,16 +56,25 @@ public class IngestionRunService {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
             IngestionRun run = ingestionRunRepository.save(new IngestionRun(source, correlationId));
+            // These lines are logged inside the MDC scope on purpose: a job itself
+            // logs nothing at INFO, so without them a search for this correlation
+            // id in the logs would find nothing at all.
+            log.info("Ingestion run started: source={}", source);
             try {
                 T result = job.get();
-                run.markSuccess(recordCountExtractor.applyAsInt(result));
+                int records = recordCountExtractor.applyAsInt(result);
+                run.markSuccess(records);
                 ingestionRunRepository.save(run);
-                recordDuration(sample, source, "success");
+                long elapsedNanos = recordDuration(sample, source, "success");
+                log.info("Ingestion run succeeded: source={} records={} durationMs={}",
+                        source, records, TimeUnit.NANOSECONDS.toMillis(elapsedNanos));
                 return result;
             } catch (RuntimeException e) {
                 run.markFailed(e.getMessage());
                 ingestionRunRepository.save(run);
-                recordDuration(sample, source, "failure");
+                long elapsedNanos = recordDuration(sample, source, "failure");
+                log.error("Ingestion run failed: source={} durationMs={} error={}",
+                        source, TimeUnit.NANOSECONDS.toMillis(elapsedNanos), e.toString());
                 throw e;
             }
         } finally {
@@ -68,8 +82,8 @@ public class IngestionRunService {
         }
     }
 
-    private void recordDuration(Timer.Sample sample, String source, String outcome) {
-        sample.stop(Timer.builder(METRIC_NAME)
+    private long recordDuration(Timer.Sample sample, String source, String outcome) {
+        return sample.stop(Timer.builder(METRIC_NAME)
                 .tag("source", source)
                 .tag("outcome", outcome)
                 .register(meterRegistry));

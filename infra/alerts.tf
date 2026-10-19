@@ -63,6 +63,36 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
   treat_missing_data = "notBreaching"
 }
 
+# The two alarms above both stay silent when NOTHING is running -- the outage
+# where a task can't pull its image, crash-loops before registering, or was
+# never started. The ALB answers 503 itself in that case, and those errors are
+# counted as HTTPCode_ELB_5XX_Count, not the target-generated
+# HTTPCode_Target_5XX_Count alarmed on above; and UnHealthyHostCount needs a
+# registered target to be unhealthy. HealthyHostCount dropping below 1 catches
+# it, with missing data treated as breaching (no registered target publishes
+# nothing). Five consecutive minutes is deliberate headroom for a normal
+# deploy: the app takes ~90s to boot plus two passing health checks, so a task
+# that comes up healthy never trips this, while a fresh apply with no image to
+# pull does after five minutes.
+resource "aws_cloudwatch_metric_alarm" "alb_no_healthy_hosts" {
+  alarm_name          = "${var.project}-alb-no-healthy-hosts"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 5
+  metric_name         = "HealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  alarm_description   = "No healthy ECS task behind the load balancer for 5 minutes -- the app is effectively down"
+  dimensions = {
+    TargetGroup  = aws_lb_target_group.app.arn_suffix
+    LoadBalancer = aws_lb.main.arn_suffix
+  }
+  alarm_actions      = [aws_sns_topic.alerts.arn]
+  ok_actions         = [aws_sns_topic.alerts.arn]
+  treat_missing_data = "breaching"
+}
+
 resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
   alarm_name          = "${var.project}-ecs-cpu-high"
   comparison_operator = "GreaterThanThreshold"

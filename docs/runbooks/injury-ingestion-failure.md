@@ -23,14 +23,14 @@ One real runbook, written end to end, as a template for any other ingestion job 
 
 ## Diagnosis steps
 
-1. **Get the correlation id** from the failed `ingestion_runs` row (or from the `503` response if you triggered it manually and the detail message doesn't explain enough).
-2. **Find the exact log lines in CloudWatch** — log group `/ecs/fantasyiq`, every log line from that run carries the same correlation id in its structured JSON (see `logback-spring.xml`). In the CloudWatch console: Logs Insights, then
+1. **Get the correlation id** from the failed `ingestion_runs` row. (The `503` response body does not include it -- only the run row and the logs do.)
+2. **Find the log lines in CloudWatch** — log group `/ecs/fantasyiq`. The deployed app runs the `aws` Spring profile, so logs are JSON (see `logback-spring.xml`) and every line logged *during* the run carries the same `correlationId` field. In the CloudWatch console: Logs Insights, then
    ```
    fields @timestamp, @message
    | filter correlationId = "<the id from step 1>"
    | sort @timestamp asc
    ```
-   This reconstructs the exact sequence of what happened during that run, not just the final error.
+   A run reliably produces a start line (`Ingestion run started: source=INJURY_PROVIDER`) and either a success line (with record count and duration) or an error line (`Ingestion run failed: ... error=<exception>`). That error line is usually the answer; the jobs themselves log nothing else at INFO. If the query returns nothing, check the app is actually on the `aws` profile -- plain-text logs mean it isn't (see `SPRING_PROFILES_ACTIVE` in `infra/ecs.tf`).
 3. **Check the circuit breaker's current state** — if ESPN was genuinely down or rate-limiting, the `espnApi` circuit breaker (shared by all ESPN-backed ingestion: players, games, player-game-stats, and injuries) may have tripped OPEN, meaning *every* ESPN-backed job will keep failing fast until it recovers, not just this one. `/actuator/prometheus` (authenticated) exposes `resilience4j_circuitbreaker_state{name="espnApi",...}` — a live, real-time view of this, though it's not yet on the CloudWatch dashboard (same deferred app-metrics gap noted above).
 
 ## Common causes, and what to do about each

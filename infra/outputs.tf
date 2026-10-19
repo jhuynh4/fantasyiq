@@ -52,6 +52,16 @@ output "github_actions_role_arn" {
   value       = aws_iam_role.github_actions_deploy.arn
 }
 
+output "admin_email" {
+  description = "Log in to the deployed app's /api/auth/login with this email."
+  value       = var.admin_email
+}
+
+output "admin_password_secret_name" {
+  description = "Fetch the admin password with: aws secretsmanager get-secret-value --secret-id <this value> --query SecretString --output text"
+  value       = aws_secretsmanager_secret.admin_password.name
+}
+
 output "dashboard_url" {
   description = "Direct link to the CloudWatch dashboard."
   value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.main.dashboard_name}"
