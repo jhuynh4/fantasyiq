@@ -1,8 +1,8 @@
 package com.fantasyiq.api.dto;
 
-public record AuthResponse(String accessToken, String refreshToken, String tokenType) {
+public record AuthResponse(String accessToken, String refreshToken, String tokenType, long expiresIn) {
 
-    public AuthResponse(String accessToken, String refreshToken) {
-        this(accessToken, refreshToken, "Bearer");
+    public AuthResponse(String accessToken, String refreshToken, long expiresIn) {
+        this(accessToken, refreshToken, "Bearer", expiresIn);
     }
 }
