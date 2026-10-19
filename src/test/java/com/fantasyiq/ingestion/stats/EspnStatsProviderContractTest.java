@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import java.time.Duration;
 import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -17,6 +18,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * Asserts EspnStatsProvider correctly parses a real captured payload shape
@@ -72,6 +75,9 @@ class EspnStatsProviderContractTest extends IntegrationTestBase {
         wireMock = new WireMockServer(0);
         wireMock.start();
         registry.add("fantasyiq.providers.espn.base-url", () -> "http://localhost:" + wireMock.port());
+        // Short enough that the slow-response test below finishes quickly, long enough
+        // that a cold-JVM first call to the local WireMock can't trip it by accident.
+        registry.add("fantasyiq.http-client.read-timeout", () -> "1s");
     }
 
     @Test
@@ -103,6 +109,17 @@ class EspnStatsProviderContractTest extends IntegrationTestBase {
         // application-test.yml. This doesn't assert exactly how many of the
         // 10 calls involved a retry internally -- only the eventual outcome.
         assertThat(lastException).isInstanceOf(EspnUnavailableException.class);
+    }
+
+    @Test
+    void aVendorThatNeverAnswersBecomesATypedFailureNotAHang() {
+        wireMock.stubFor(get(urlEqualTo("/teams")).willReturn(aResponse().withStatus(200).withFixedDelay(5_000)));
+
+        // Three attempts at the 1s read timeout, so roughly 3s -- far under the 15s ceiling,
+        // and nowhere near the 5s the stub would have taken to answer even once.
+        assertTimeoutPreemptively(Duration.ofSeconds(15), () -> {
+            assertThatThrownBy(() -> statsProvider.fetchTeams()).isInstanceOf(EspnUnavailableException.class);
+        });
     }
 
     private static final String TEAMS_PAYLOAD = """

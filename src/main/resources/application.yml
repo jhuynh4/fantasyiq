@@ -55,6 +55,12 @@ fantasyiq:
   admin:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}
+  # Applies to every outbound vendor call. Each failed attempt is retried (3 attempts,
+  # see resilience4j below), so one hung vendor call can take up to ~3x read-timeout
+  # before it surfaces as a failure.
+  http-client:
+    connect-timeout: 5s
+    read-timeout: 10s
   rate-limit:
     auth:
       capacity: 10
