@@ -27,18 +27,18 @@ public class AuthController {
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         AuthService.AuthTokens tokens = authService.register(request.email(), request.password(), request.displayName());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new AuthResponse(tokens.accessToken(), tokens.refreshToken()));
+                .body(new AuthResponse(tokens.accessToken(), tokens.refreshToken(), tokens.expiresInSeconds()));
     }
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthService.AuthTokens tokens = authService.login(request.email(), request.password());
-        return ResponseEntity.ok(new AuthResponse(tokens.accessToken(), tokens.refreshToken()));
+        return ResponseEntity.ok(new AuthResponse(tokens.accessToken(), tokens.refreshToken(), tokens.expiresInSeconds()));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         AuthService.AuthTokens tokens = authService.refresh(request.refreshToken());
-        return ResponseEntity.ok(new AuthResponse(tokens.accessToken(), tokens.refreshToken()));
+        return ResponseEntity.ok(new AuthResponse(tokens.accessToken(), tokens.refreshToken(), tokens.expiresInSeconds()));
     }
 }

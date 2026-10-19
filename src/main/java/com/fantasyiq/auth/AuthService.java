@@ -77,7 +77,7 @@ public class AuthService {
         String rawRefreshToken = generateRawToken();
         Instant expiresAt = Instant.now().plus(jwtProperties.refreshTokenTtlDays(), ChronoUnit.DAYS);
         refreshTokenRepository.save(new RefreshToken(user, hash(rawRefreshToken), expiresAt));
-        return new AuthTokens(accessToken, rawRefreshToken);
+        return new AuthTokens(accessToken, rawRefreshToken, jwtProperties.accessTokenTtlMinutes() * 60);
     }
 
     private String generateRawToken() {
@@ -95,6 +95,6 @@ public class AuthService {
         }
     }
 
-    public record AuthTokens(String accessToken, String refreshToken) {
+    public record AuthTokens(String accessToken, String refreshToken, long expiresInSeconds) {
     }
 }
