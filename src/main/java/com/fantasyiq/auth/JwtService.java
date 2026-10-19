@@ -18,6 +18,8 @@ import java.util.UUID;
 @Component
 public class JwtService {
 
+    private static final String ROLE_CLAIM = "role";
+
     private final SecretKey key;
     private final long accessTokenTtlMinutes;
 
@@ -26,11 +28,12 @@ public class JwtService {
         this.accessTokenTtlMinutes = properties.accessTokenTtlMinutes();
     }
 
-    public String generateAccessToken(UUID userId, String email) {
+    public String generateAccessToken(UUID userId, String email, UserRole role) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("email", email)
+                .claim(ROLE_CLAIM, role.name())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(accessTokenTtlMinutes, ChronoUnit.MINUTES)))
                 .signWith(key)
@@ -48,6 +51,22 @@ public class JwtService {
 
     public UUID extractUserId(String token) {
         return UUID.fromString(parseClaims(token).getSubject());
+    }
+
+    /**
+     * A token with no role claim (issued before roles existed) or an
+     * unrecognized one is treated as a plain USER -- never as ADMIN.
+     */
+    public UserRole extractRole(String token) {
+        String claim = parseClaims(token).get(ROLE_CLAIM, String.class);
+        if (claim == null) {
+            return UserRole.USER;
+        }
+        try {
+            return UserRole.valueOf(claim);
+        } catch (IllegalArgumentException e) {
+            return UserRole.USER;
+        }
     }
 
     private Claims parseClaims(String token) {

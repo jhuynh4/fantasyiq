@@ -2,6 +2,8 @@ package com.fantasyiq.auth;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
@@ -31,6 +33,10 @@ public class User {
     @Column(name = "default_scoring_format", nullable = false)
     private String defaultScoringFormat = "PPR";
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserRole role = UserRole.USER;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -45,6 +51,11 @@ public class User {
         this.email = email;
         this.passwordHash = passwordHash;
         this.displayName = displayName;
+    }
+
+    public User(String email, String passwordHash, String displayName, UserRole role) {
+        this(email, passwordHash, displayName);
+        this.role = role;
     }
 
     @PrePersist
@@ -77,6 +88,10 @@ public class User {
 
     public String getDefaultScoringFormat() {
         return defaultScoringFormat;
+    }
+
+    public UserRole getRole() {
+        return role;
     }
 
     public Instant getCreatedAt() {

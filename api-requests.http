@@ -3,6 +3,12 @@
 ### In IntelliJ, run requests top to bottom with the "Run All Requests" gutter action,
 ### or click the individual green arrows -- {{accessToken}}/{{refreshToken}} are
 ### captured automatically from prior responses via the client.global scripts below.
+###
+### The ingest / compute / generate / backtest requests below need an ADMIN token --
+### a normally registered user gets 403. To get one locally, start the app with
+### ADMIN_EMAIL=admin@fantasyiq.dev and ADMIN_PASSWORD=local-admin-passphrase set in its
+### environment (the account is created at startup if it doesn't exist), then run the
+### "Admin login" request before the trigger requests.
 
 @baseUrl = http://localhost:8080
 
@@ -82,7 +88,22 @@ Content-Type: application/json
   "refreshToken": "{{oldRefreshToken}}"
 }
 
-### Trigger player ingestion from ESPN (requires auth; pulls all 32 rosters, can take a while)
+### Admin login -- replaces {{accessToken}} with an admin token so the trigger requests below work
+# @name adminLogin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@fantasyiq.dev",
+  "password": "local-admin-passphrase"
+}
+
+> {%
+    client.global.set("accessToken", response.body.accessToken);
+    client.global.set("refreshToken", response.body.refreshToken);
+%}
+
+### Trigger player ingestion from ESPN (requires an admin; pulls all 32 rosters, can take a while)
 POST {{baseUrl}}/api/players/ingest
 Authorization: Bearer {{accessToken}}
 
