@@ -1,0 +1,44 @@
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --border: #dce3e9;
+  --text: #172838;
+  --muted: #637383;
+  --subtle: #edf1f4;
+  --accent: #285cd1;
+  --on-accent: #f4f6f8;
+  --accent-tint: #ebf1fd;
+  --positive: #23765f;
+  --negative: #ad533f;
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --radius-badge: 4px;
+  --radius-control: 6px;
+  --radius-card: 10px;
+
+  --header-height: 72px;
+  --page-padding: 20px;
+}
+
+:root[data-theme='dark'] {
+  --bg: #101922;
+  --surface: #17232f;
+  --border: #2d3d4c;
+  --text: #e7edf4;
+  --muted: #9baebf;
+  --subtle: #22313f;
+  --accent: #8eaeff;
+  --on-accent: #101922;
+  --accent-tint: #223657;
+  --positive: #7ac5ab;
+  --negative: #eda28d;
+}
+
+@media (min-width: 900px) {
+  :root {
+    --header-height: 80px;
+    --page-padding: 48px;
+  }
+}
