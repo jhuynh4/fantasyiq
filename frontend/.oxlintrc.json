@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  },
+  "overrides": [
+    {
+      // A context module exports its provider and the hook that reads it together by design.
+      "files": ["src/auth/AuthContext.tsx", "src/theme/ThemeContext.tsx"],
+      "rules": { "react/only-export-components": "off" }
+    }
+  ]
+}
