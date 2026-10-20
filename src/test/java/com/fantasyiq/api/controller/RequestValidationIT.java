@@ -45,4 +45,19 @@ class RequestValidationIT extends IntegrationTestBase {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
     }
+
+    @Test
+    void malformedPlayerIdReturnsBadRequestNotAServerError() throws Exception {
+        mockMvc.perform(get("/api/players/abc").with(user("tester")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").value("Parameter 'id' has the wrong format"));
+    }
+
+    @Test
+    void malformedPlayerIdOnTrendingReturnsBadRequestNotAServerError() throws Exception {
+        mockMvc.perform(get("/api/players/abc/trending").with(user("tester")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
 }
