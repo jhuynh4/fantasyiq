@@ -1,12 +1,12 @@
 # Current Work
 
-## Status: Phases 1-7 all complete and merged — pausing before Phase 8 (frontend) to review
+## Status: backend complete through Phase 7 plus a hardening pass (PRs #27-#32) — Phase 8 (frontend) not started
 
-All of Phase 7 is merged to `main` (PRs #18-25) and proven against a real AWS account end to end. Phase 6's closing slice (CloudWatch dashboard, 4 alarms, a runbook) is also now merged, proven against a real live deployment. A real `git push` → merge to `main` genuinely builds the image, pushes it to ECR, and redeploys ECS automatically, with ECS confirming the new version healthy before the pipeline reports success. Everything was `terraform destroy`'d afterward (45 resources) to stop billing — **nothing is currently running in AWS**. All of the infrastructure, pipeline, and observability code is real, complete, and already proven; bringing it back is just `terraform apply`.
+Phases 1-7 are merged to `main`. After a full backend/cloud review, a hardening pass (PRs #27-#32, below) closed the gaps the review found. **Nothing is currently running in AWS** — everything was `terraform destroy`'d to stop billing (the account is on a credit-limited plan, hence the apply → verify → destroy rhythm). The infrastructure and pipeline code were proven live earlier; **PR #29's infra changes have never run against real AWS** (see "Pending: first apply of PR #29").
 
-The backend (Phases 1-7) is functionally done. Deliberately pausing before Phase 8 (frontend) to review the whole backend + cloud integration rather than context-switching straight into new work.
+The next real step is the frontend. It needs a few decisions first (see "Recommended next steps").
 
-## What's been completed (Phases 1-6, all merged to `main`)
+## What's been completed (Phases 1-7, all merged to `main`)
 
 **Phase 1** — auth (JWT register/login/refresh with token rotation) and player ingestion.
 
@@ -14,57 +14,75 @@ The backend (Phases 1-7) is functionally done. Deliberately pausing before Phase
 
 **Phase 3** — start/sit recommendation engine (6 factors), player trending endpoint, backtest validation, weight tuning + recent-performance factor (took real predictive correlation from `0.0137` to `0.306`).
 
-**Phase 4** — Redis caching (`GET /recommendations/start-sit` 177ms → 4.6ms avg, `GET /players/{id}` 25.5ms → 3.6ms avg), Bucket4j rate limiting on `/api/auth/**`, Bean Validation on previously-unconstrained request params.
+**Phase 4** — Redis caching, Bucket4j rate limiting on `/api/auth/**`, Bean Validation on previously-unconstrained request params.
 
-**Phase 5, first slice** — trade analyzer (`POST /api/trades/analyze`): rest-of-season value comparison reusing three of the six factor calculators plus a positional replacement-level adjustment. ~3.3s per request (known, deliberately-accepted N+1 cost), not batched yet.
+**Phase 5, first slice** — trade analyzer (`POST /api/trades/analyze`): rest-of-season value comparison reusing three of the six factor calculators plus a positional replacement-level adjustment.
 
-**Phase 6, first slice** — Micrometer instrumentation for ingestion job duration/success (`ingestion.run.duration`, tagged by source/outcome). Request latency, cache hit ratio, and external API error rate turned out to already be auto-instrumented for free — confirmed live rather than assumed.
+**Phase 6** — Micrometer metrics (`ingestion.run.duration`; request latency, cache hit ratio and circuit-breaker state were auto-instrumented), plus a CloudWatch dashboard, 4 alarms via SNS email, and a runbook (`docs/runbooks/injury-ingestion-failure.md`).
 
-**Phase 6, closing slice** — CloudWatch dashboard (5 widgets: ALB requests/5xx, response time p95, ECS CPU/memory, RDS CPU/connections, healthy/unhealthy hosts) and 4 alarms (ALB 5xx rate, unhealthy hosts, ECS CPU, RDS CPU) via SNS email, plus one real runbook (`docs/runbooks/injury-ingestion-failure.md`). Log shipping turned out to already be done (the ECS task's `awslogs` driver). Deliberately scoped to native AWS metrics only — the dev plan's "ingestion job failure" and "circuit breaker open" alarms need an app-level Micrometer→CloudWatch bridge, not built yet (see "What remains" below). **Verifying this live surfaced a real bug**: `aws_ecs_service` had no `health_check_grace_period_seconds`, so the ALB was killing every task ~10 seconds before it finished its ~90s boot, a self-inflicted crash loop. Fixed (`180s` grace period), confirmed live.
+**Phase 7** — multi-stage Dockerfile, Terraform for the whole AWS stack (VPC, ALB, ECS Fargate, RDS, ElastiCache, ECR, Secrets Manager, IAM), and a GitHub Actions deploy pipeline authenticating via OIDC (no stored AWS keys). Found and fixed live: Secrets Manager's 30-day recovery window vs. destroy-and-recreate, GitHub's "immutable subject claims" token format, and an ECS crash loop from a missing `health_check_grace_period_seconds`.
 
-Full writeups for all of the above in `CLAUDE.md`.
+Full writeups of all of the above in `CLAUDE.md`.
 
-## Phase 7 — AWS deployment & CI/CD (PRs #18-25, all merged)
+## Backend hardening pass (PRs #27-#32, all merged)
 
-Setup done first: AWS CLI + Terraform installed locally, an IAM user (`fantasyiq-terraform`, `AdministratorAccess` for now) created for Terraform to use, a billing alert set up in AWS Budgets. Account is on AWS's credit-based Free Plan (6 months or until credits run out), which is *why* the build-and-destroy rhythm matters here. Region: `us-east-1`. Budget posture: minimal-cost (single-AZ, no NAT gateway, smallest reasonable instance sizes).
+Found by reading the code end to end after Phase 7. Each was its own PR; details and the evidence behind each are in `CLAUDE.md`'s "Known gaps" section.
 
-**Dockerfile (PR #18).** Multi-stage build, Gradle running *inside* the container (also sidesteps this dev machine's known Gradle loopback issue). Verified locally against real `docker-compose` Postgres/Redis before ever touching AWS.
+- **#27 — 401 and `expiresIn`.** Missing/malformed/expired access tokens now return 401 (`UnauthorizedEntryPoint`, with `WWW-Authenticate: Bearer`) instead of Spring Security's default 403, and every auth response includes `expiresIn` in seconds, so a client can tell when to refresh.
+- **#28 — admin role.** `users.role` (V15), carried as a `role` claim in the access token (missing/unknown = USER). The nine POST trigger endpoints (ingest/compute/generate/backtest) require ADMIN: anonymous gets 401, a non-admin 403. The first admin is created at startup from `ADMIN_EMAIL`/`ADMIN_PASSWORD` only if no such account exists, and never promotes an existing one (emails aren't verified).
+- **#29 — `aws` profile, admin wiring, alarm.** The task now runs `SPRING_PROFILES_ACTIVE=aws` (JSON logs at INFO) instead of `local` (plain text at DEBUG with every SQL statement). `IngestionRunService` now logs start/success/failure inside the correlation-id scope — previously no job logged anything inside its run, so a correlationId search found nothing. Terraform generates an `admin-password` secret and wires `ADMIN_EMAIL`/`ADMIN_PASSWORD` onto the task. New `HealthyHostCount < 1` alarm (missing data = breaching) for the outage the 5xx and unhealthy-host alarms stay silent on.
+- **#30 — HTTP timeouts.** `fantasyiq.http-client` connect 5s / read 10s on every vendor `RestClient`, validated at startup. A hung vendor call used to stall a job forever (retry and the circuit breaker only react to failures). With 3 attempts a hung call surfaces after ~30s as a 503 and a FAILED `ingestion_runs` row.
+- **#31 — scheduled scoring.** `IngestionScheduler` runs scoring daily at 07:30 (server zone, UTC on ECS), after players 06:00 / games 06:15 / injuries 07:00. `CurrentWeekResolver` picks the week from the schedule (earliest game with kickoff within the last 6h or the next 10 days); nothing in the offseason. Verified by firing the real job with a shifted JVM clock.
+- **#32 — N+1 on recommendations.** `@EntityGraph` on the two list queries: a cache miss for 800 recommendations went 1,601 SQL statements → 1 and 1.16s → 0.40s with a byte-identical response; `tune-weights` 2,401 → 801.
 
-**Terraform infrastructure (PRs #19-21).** Network layer (VPC, subnets, no NAT gateway) → security groups + ECR → RDS/ElastiCache/ALB/ECS (the first resources that cost real money). RDS's master password is never set in code — AWS generates and owns it directly in Secrets Manager. A real Terraform-generated `JWT_SECRET` plus empty placeholder secrets for the two external API keys, set by hand via `aws secretsmanager put-secret-value`, never through this code or chat.
+## Pending: first apply of PR #29
 
-**GitHub Actions deploy pipeline (PR #22).** On every push to `main`: build the image, push to ECR tagged with the commit SHA, fetch the live ECS task definition and patch only the image (deliberately not a static file checked into the repo — Terraform already owns the task definition's full shape), redeploy, wait for ECS to confirm healthy. Authenticates via GitHub's OIDC provider — no long-lived AWS keys stored anywhere.
+The infra/profile changes in #29 are verified locally (the real image under the `aws` profile against throwaway Postgres/Redis; `terraform validate` + `fmt -check` in a container) but **not applied to real AWS**. At the next AWS session, in order:
 
-**Two real bugs found only by testing this against a real AWS account, both fixed (PRs #23-25):**
-1. **Secrets Manager's 30-day recovery window** conflicts directly with destroying and recreating every session — a deleted secret's name stays reserved for 30 days, so the next `apply` fails trying to recreate it. Fixed with `recovery_window_in_days = 0` on all three custom secrets.
-2. **The OIDC trust policy's `sub` condition used the plain `repo:OWNER/NAME:ref:...` format every tutorial (including GitHub's own docs) shows — but this repo's real tokens use GitHub's newer "immutable subject claims" format** (`repo:OWNER@OWNER_ID/NAME@REPO_ID:ref:...`), which embeds numeric ids so the trust policy survives a repo/account rename. Found by decoding a real token live (a temporary debug step), not by assuming documentation was current — the same "verify the real behavior, don't trust the documented format" lesson already learned once this project in a completely different context (`ConstraintViolationException` vs. `HandlerMethodValidationException`, Phase 4).
+1. `terraform apply`, push an image (by hand or via the pipeline — the new registry starts empty), set the two vendor API keys (`aws secretsmanager put-secret-value`) and restart the task.
+2. **The task starts** — this proves the execution role can read the new `admin-password` secret (if it can't, ECS never starts the task).
+3. Fetch the admin password: `aws secretsmanager get-secret-value --secret-id fantasyiq/admin-password --query SecretString --output text`, then log in at `/api/auth/login` as `admin@fantasyiq.dev` (new password every apply, recreated with the database).
+4. Run an ingestion job as admin, then a CloudWatch Logs Insights query for its `correlationId` — it should return the start and finish lines.
+5. The new no-healthy-hosts alarm should stay quiet through a normal ~4-minute boot, and fire after 5 minutes if no image was pushed.
+6. A fresh database is empty: re-run the ingestion jobs and `/generate` (or wait for 07:30 UTC) before the rankings show anything.
 
-Full design rationale for all of Phase 7, including the complete OIDC debugging story, in `CLAUDE.md`'s "Phase 7 — AWS deployment & CI/CD" section.
+## What remains
 
-**Verified live, twice, then torn down both times.** `terraform apply` → `/actuator/health` returns `UP` through the ALB's public DNS (which already confirms RDS/ElastiCache connectivity via Spring Boot's aggregated health check) → a real register call confirms the JWT secret wiring → `terraform destroy`. The second time, a real `git push` through the merged pipeline rebuilt and redeployed the app automatically, confirmed via the same health check, before destroying again.
+**Product:**
+- **Phase 8, the frontend** — nothing built. The big one.
+- **No START/SIT verdict** — `GET /recommendations/start-sit` returns a score and a LOW/MEDIUM/HIGH confidence (just a count of available factors, which nothing consumes), no verdict. The PRD wanted START / SIT / TOSS-UP.
+- **A full week's response is ~400 KB** (800 players, no pagination); a cache hit still takes ~0.12s for that payload. A UI should request one position at a time, or the API should gain a `limit`.
+- Waiver-wire analyzer (`analytics/waiver` is an empty placeholder); K/DST support (needs a different ESPN endpoint).
 
-## What remains (lower priority, not blocking)
+**Backend gaps:**
+- Odds and weather ingestion have no cron, so scheduled scoring omits those factors unless ingested by hand; no Sunday-morning refresh (would need injury ingestion to run again then, in an `America/New_York` zone).
+- `/actuator/prometheus` and `/actuator/metrics` are readable by any authenticated user (only the nine trigger endpoints are admin-only).
+- Rate limiting keys on `request.getRemoteAddr()`, which behind the ALB is the ALB's address — probably one shared bucket on AWS (no forwarded-headers config).
+- Role changes take up to the 15-minute token lifetime to apply.
+- Trade analyzer: the injury factor's -1000 makes a short-term OUT player worth catastrophic value over a rest-of-season horizon; `computeReplacementLevels` is N+1 (~3.3s per request).
+- Backtest: N+1 inside `gatherFactors` (~18 min for a full season), and `RecommendationMatcher` does one lookup per recommendation (~800 statements for a week).
+- `refresh_tokens` is never cleaned up; no `EspnInjuryProvider` contract test.
+- The model: `MATCHUP` and `USAGE` show ~no signal in backtests, `VEGAS` and `WEATHER` have never been backtestable (no historical data), and the composite (0.31) is below the best single factor (0.54) — not a like-for-like comparison (different subsets of players), but a hint the weaker factors add noise. Weights are hand-picked except `RECENT_PERFORMANCE`.
 
-- **App-level Micrometer→CloudWatch metrics bridge** — the dev plan's "ingestion job failure" and "circuit breaker open" alarms aren't implemented; only native-AWS-metric alarms exist (5xx rate, CPU, unhealthy hosts). Needs `micrometer-registry-cloudwatch2` + a new IAM task role (distinct from the execution role — the app's own code would need to call CloudWatch directly for the first time).
-- **Waiver-wire analyzer** — `analytics/waiver`/`ingestion/trending` are still empty `package-info.java` placeholders. Original scope was start/sit + waiver + trade; only start/sit and trade got built.
-- **K/DST position support** — ESPN's gamelog endpoint only covers QB/RB/WR/TE; needs a different team-level endpoint, never built.
-- **HTTPS** — ALB is HTTP-only; needs a real domain + ACM cert before real users.
-- Trade analyzer performance (N+1 query pattern in `computeReplacementLevels`, ~3.3s per request) — not urgent, occasional endpoint
-- WireMock contract test coverage for `EspnInjuryProvider` (the only adapter without one)
-- Backtest performance (N+1 query pattern inside `gatherFactors`, ~18 min for a full season) — not urgent, occasional endpoint
-- `MatchupFactorCalculator`'s long-run uniform averaging and the weak `USAGE` factor remain real, un-investigated hypotheses if further model improvement is wanted later
-- `README.md`/`docs/` still frozen at Phase 0, never kept in sync with reality
+**Infra:**
+- App-level Micrometer→CloudWatch bridge (job-failure and circuit-breaker alarms) — needs `micrometer-registry-cloudwatch2` and a new IAM *task* role.
+- Remote Terraform state (it's a local, gitignored file containing secrets; losing it orphans the resources).
+- HTTPS (ALB is HTTP-only; needs a domain + ACM certificate before real users).
+- The pipeline updates the service's task definition outside Terraform, and `aws_ecs_service` has no `ignore_changes` on it, so a later `terraform apply` would likely try to revert it (never hit in practice, since every session ends in a destroy).
+- The Deploy workflow runs on every push to `main` (including docs-only and direct pushes) and fails when nothing is deployed, because the OIDC role doesn't exist. A re-run after a failure *past* the push step would likely fail again at the push (immutable image tags; reasoned, not observed).
+- Running more than one app instance would need a Redis-backed rate limiter, a lock on the cron jobs, and capped Hikari pools.
+- `README.md`/`docs/` are still frozen at Phase 0.
 
 ## Recommended next steps
 
-Phases 1-7 are done. Currently pausing deliberately to review the whole backend + cloud integration before starting anything new — not a blocker, a chosen checkpoint. After that, the real remaining directions are:
+1. **Phase 8, the frontend.** Decisions to settle first: the stack (React was assumed in the docs, nothing's chosen); the first screen (suggested: login → a week's ranked list with a position filter → a player page showing the factor breakdown); where the START/SIT verdict comes from (backend, or derived in the UI from rank within position); how to avoid the 400 KB response.
+2. **The first real AWS apply of #29**, following the checklist above, before building on it.
+3. Smaller items from "What remains" as they become relevant.
 
-1. **Phase 8** — frontend. The big one; nothing built yet.
-2. **The app-level metrics bridge** — closes out the dev plan's Phase 6 checklist fully (job-failure/circuit-breaker alarms).
-3. **Waiver analyzer** — the one analytics feature from the original three-feature scope (start/sit, waiver, trade) not yet built.
-4. Smaller polish items — batch the trade analyzer's replacement-level computation, K/DST support, HTTPS, the missing `EspnInjuryProvider` contract test.
+Remote branches: all 32 branches from merged PRs (`phase-1` through `phase-8`) still exist on origin — cleanup is deferred, nothing deletes them automatically.
 
-Remote branches `phase-2/defense-vs-position-stats`, `phase-2/weather-forecasts`, `phase-2/betting-lines`, `phase-3/start-sit-scoring-engine`, `phase-3/player-trending-endpoint`, and `phase-3/backtest-validation` still exist on origin from prior slices (deferred cleanup, unchanged). All Phase 7 branches have been deleted both locally and remotely.
+## Working in this environment
 
-## No known blockers or in-flight problems
-
-Everything on `main` is merged and CI-verified. **No AWS resources are currently running** — expected, not a problem; it's the intended state between sessions given the credit-limited account. Local Gradle CLI has been unreliable this session (JVM loopback-socket issue — worked around by building via IntelliJ instead, see `CLAUDE.md`'s "Local environment gotchas").
+- **Local Gradle is unusable** (JVM loopback-socket issue, see `CLAUDE.md`). What works instead, with Docker Desktop running: `docker build --target build -t x .` compiles everything, then `docker run --rm x sh -c "./gradlew test --tests '*SomeTest'"` runs unit tests in Linux. **Testcontainers integration tests (`*IT`) cannot run that way** — CI is their only check, so a change touching them is only fully verified once CI is green.
+- Real-behavior checks done so far used the actual image against throwaway Postgres/Redis containers on a private Docker network. To log Hibernate SQL, set it via `SPRING_APPLICATION_JSON={"logging.level.org.hibernate.SQL":"DEBUG"}` — Spring lowercases env var names, so `LOGGING_LEVEL_ORG_HIBERNATE_SQL` silently does nothing.
+- Git: one branch per PR (`phase-N/short-description`), PRs created by hand from the compare URL (no `gh` CLI), no AI attribution anywhere. This file is committed straight to `main`.
