@@ -46,3 +46,10 @@ export interface PlayerDetail {
   status: string | null
   birthDate: string | null
 }
+
+export interface PlayerSummary {
+  id: string
+  fullName: string
+  position: string
+  team: string | null
+}
