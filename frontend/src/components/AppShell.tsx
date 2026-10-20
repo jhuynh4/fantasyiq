@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Columns2, ListOrdered } from 'lucide-react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.tsx'
 import { Logo } from './Logo.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
@@ -58,6 +58,8 @@ function AccountMenu() {
 }
 
 export function AppShell() {
+  // A player page belongs to the rankings, so that link stays lit while one is open.
+  const onPlayerPage = useLocation().pathname.startsWith('/players/')
   return (
     <>
       <header className="app-header">
@@ -65,7 +67,7 @@ export function AppShell() {
           <Logo />
         </Link>
         <nav className="app-nav" aria-label="Main">
-          <NavLink to="/" end>
+          <NavLink to="/" end className={({ isActive }) => (isActive || onPlayerPage ? 'active' : '')}>
             <ListOrdered size={18} aria-hidden="true" />
             Rankings
           </NavLink>

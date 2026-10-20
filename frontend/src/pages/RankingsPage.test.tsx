@@ -71,6 +71,17 @@ describe('RankingsPage', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/recommendations/start-sit?season=2025&week=10&position=QB')
   })
 
+  it('links each player to their page, carrying the week along', async () => {
+    fetchMock.mockResolvedValueOnce(json([recommendation({ playerId: 'abc-123', playerName: 'Josh Allen' })]))
+
+    renderPage('/?season=2025&week=10')
+
+    expect(await screen.findByRole('link', { name: 'Josh Allen' })).toHaveAttribute(
+      'href',
+      '/players/abc-123?season=2025&week=10',
+    )
+  })
+
   it('asks for the position that is picked', async () => {
     fetchMock.mockImplementation(async () => json([]))
     renderPage('/?season=2025&week=10&position=QB')

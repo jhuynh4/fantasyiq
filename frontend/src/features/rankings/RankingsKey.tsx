@@ -17,6 +17,7 @@ export function FactorLegend() {
         Read the shape: − left of zero reduces the score; + right adds to it. Segment length shows points, not
         confidence. An injured player ruled out for the week shows a full-width bar to the left.
       </p>
+      <p className="select-hint">Select a player to see the full score breakdown →</p>
     </div>
   )
 }
