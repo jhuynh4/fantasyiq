@@ -11,6 +11,13 @@
   --positive: #23765f;
   --negative: #ad533f;
 
+  --factor-recent: #547a83;
+  --factor-usage: #a2b5cf;
+  --factor-matchup: #c27d68;
+  --factor-vegas: #426fbe;
+  --factor-weather: #7295cc;
+  --factor-injury: #2f3f4f;
+
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
@@ -34,6 +41,7 @@
   --accent-tint: #223657;
   --positive: #7ac5ab;
   --negative: #eda28d;
+  --factor-injury: #c9d5e2;
 }
 
 @media (min-width: 900px) {

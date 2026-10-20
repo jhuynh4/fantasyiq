@@ -19,7 +19,8 @@ npm install
 npm run dev        # http://localhost:5173, /api is proxied to http://localhost:8080
 ```
 
-Set `API_PROXY_TARGET` to point the dev proxy somewhere else.
+Set `API_PROXY_TARGET` to point the dev proxy somewhere else. If you run the dev server in a
+container on Windows, also set `VITE_USE_POLLING=1`, otherwise edits on the host never reach it.
 
 The compose stack creates a development admin account (`admin@fantasyiq.dev`, password from
 `ADMIN_PASSWORD`, see `docker-compose.yml`). Any account can also be created from the sign-in page.

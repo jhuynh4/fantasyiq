@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Columns2, ListOrdered } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.tsx'
 import { Logo } from './Logo.tsx'
@@ -65,9 +66,13 @@ export function AppShell() {
         </Link>
         <nav className="app-nav" aria-label="Main">
           <NavLink to="/" end>
+            <ListOrdered size={18} aria-hidden="true" />
             Rankings
           </NavLink>
-          <NavLink to="/compare">Compare</NavLink>
+          <NavLink to="/compare">
+            <Columns2 size={18} aria-hidden="true" />
+            Compare
+          </NavLink>
         </nav>
         <div className="header-actions">
           <ThemeToggle />

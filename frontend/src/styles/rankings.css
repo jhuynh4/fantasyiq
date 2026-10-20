@@ -1,0 +1,352 @@
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.rankings {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.page-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.title-row .page-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+.pickers {
+  display: flex;
+  gap: 8px;
+}
+.picker {
+  position: relative;
+  display: flex;
+  flex: 1;
+}
+.picker select {
+  appearance: none;
+  width: 100%;
+  height: 42px;
+  padding: 0 36px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+.picker svg {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.rankings-card {
+  overflow: hidden;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  width: 66px;
+  height: 44px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+.tab:disabled {
+  cursor: default;
+}
+.table-context {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 16px;
+  font-size: 12px;
+}
+.table-context span {
+  font-size: 11px;
+}
+.panel-status {
+  padding: 24px 16px;
+}
+
+/* One row layout for phones; the desktop media query below turns it into table columns. */
+.rankings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.rankings-table thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.rankings-table tr {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  grid-template-areas:
+    'rank player score'
+    '. confidence shape';
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+.rankings-table td {
+  display: block;
+  padding: 0;
+}
+.cell-rank {
+  grid-area: rank;
+  color: var(--muted);
+  font-size: 13px;
+}
+.cell-player {
+  grid-area: player;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.player-name,
+.player-meta {
+  display: block;
+}
+.player-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.player-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+.meta-position {
+  display: none;
+}
+.rankings-table .cell-team {
+  display: none;
+}
+.cell-score {
+  grid-area: score;
+  font-size: 20px;
+  font-weight: 600;
+}
+.cell-confidence {
+  grid-area: confidence;
+}
+.cell-shape {
+  grid-area: shape;
+  justify-self: end;
+}
+
+.show-all {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-flex;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-badge);
+  background: var(--subtle);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.badge-high {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.factor-shape {
+  position: relative;
+  display: block;
+  width: 102px;
+  height: 20px;
+}
+.factor-segment {
+  position: absolute;
+  top: 5px;
+  height: 10px;
+  border: 0.5px solid var(--surface);
+}
+.factor-baseline {
+  position: absolute;
+  top: 1px;
+  width: 1px;
+  height: 18px;
+  background: var(--muted);
+}
+
+.table-key {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11px;
+  list-style: none;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+}
+
+.confidence-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.confidence-guide h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.confidence-guide p {
+  font-size: 12px;
+}
+.confidence-guide dl {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+.confidence-guide dl div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.confidence-guide dt,
+.confidence-guide dd {
+  margin: 0;
+}
+.data-note {
+  padding-top: 4px;
+}
+
+@media (min-width: 900px) {
+  .title-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .title-row .page-title {
+    font-size: 32px;
+  }
+  .picker {
+    flex: none;
+  }
+  .tabs {
+    margin: 0 20px;
+  }
+  .table-context {
+    padding: 14px 20px;
+  }
+  .rankings-table thead {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+  .rankings-table tr {
+    grid-template-columns: 48px minmax(0, 1fr) 60px 92px 106px 145px;
+    grid-template-areas: 'rank player team score confidence shape';
+    gap: 20px;
+    height: 65px;
+    padding: 0 20px;
+  }
+  .rankings-table thead tr {
+    height: 38px;
+    border-top: 0;
+    background: var(--subtle);
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .rankings-table th {
+    text-align: left;
+    font-weight: 600;
+  }
+  .cell-rank {
+    font-size: 14px;
+  }
+  .meta-position {
+    display: inline;
+  }
+  .meta-compact {
+    display: none;
+  }
+  .rankings-table .cell-team {
+    display: block;
+    grid-area: team;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .cell-score {
+    font-size: 21px;
+  }
+  .factor-shape {
+    width: 145px;
+  }
+  .table-key {
+    padding: 20px;
+  }
+  .confidence-guide {
+    padding: 22px;
+  }
+  .confidence-guide dl {
+    flex-direction: row;
+    gap: 24px;
+  }
+  .confidence-guide dl div {
+    flex: 1;
+  }
+}

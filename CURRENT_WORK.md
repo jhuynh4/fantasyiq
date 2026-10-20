@@ -1,10 +1,10 @@
 # Current Work
 
-## Status: backend complete through Phase 7 plus a hardening pass (PRs #27-#32) — Phase 8 (frontend) not started
+## Status: backend complete through Phase 7 plus a hardening pass (PRs #27-#32) — Phase 8 (frontend) in progress, slices 0-2 built (see "Phase 8 progress")
 
 Phases 1-7 are merged to `main`. After a full backend/cloud review, a hardening pass (PRs #27-#32, below) closed the gaps the review found. **Nothing is currently running in AWS** — everything was `terraform destroy`'d to stop billing (the account is on a credit-limited plan, hence the apply → verify → destroy rhythm). The infrastructure and pipeline code were proven live earlier; **PR #29's infra changes have never run against real AWS** (see "Pending: first apply of PR #29").
 
-The next real step is the frontend. It needs a few decisions first (see "Recommended next steps").
+The frontend is being built in slices (see "Phase 8 progress"). Its design comes from a Figma file, read through the Figma MCP.
 
 ## What's been completed (Phases 1-7, all merged to `main`)
 
@@ -35,6 +35,20 @@ Found by reading the code end to end after Phase 7. Each was its own PR; details
 - **#31 — scheduled scoring.** `IngestionScheduler` runs scoring daily at 07:30 (server zone, UTC on ECS), after players 06:00 / games 06:15 / injuries 07:00. `CurrentWeekResolver` picks the week from the schedule (earliest game with kickoff within the last 6h or the next 10 days); nothing in the offseason. Verified by firing the real job with a shifted JVM clock.
 - **#32 — N+1 on recommendations.** `@EntityGraph` on the two list queries: a cache miss for 800 recommendations went 1,601 SQL statements → 1 and 1.16s → 0.40s with a byte-identical response; `tune-weights` 2,401 → 801.
 
+## Phase 8 progress (frontend, `frontend/`)
+
+Decided: React + Vite + TypeScript static app; sign-in, a week's ranked list with position tabs, player detail with the factor breakdown, head-to-head compare, trade analyzer. No absolute START/SIT verdict yet (show rank within position plus compare); one position per request. Hosting plan: S3 + CloudFront with `/api/*` routed to the ALB, so the browser sees one HTTPS origin.
+
+- **Slice 0 (#33)** — `GET /api/weeks/current`: `{season, week}`, or 204 when there is no current week.
+- **Dev stack (#34)** — `docker compose --profile app up -d --build` runs Postgres, Redis and the backend (admin `admin@fantasyiq.dev` / `local-admin-passphrase`). The local database holds the full 2025 season but nothing for the current week, so build and check screens against 2025.
+- **Slice 1 (#35)** — Vite app, Figma design tokens (light/dark), API client (in-memory access token, refresh token in localStorage, refresh ahead of expiry, one shared refresh, one retry on 401), sign-in/register, app shell, `frontend` CI job.
+- **Slice 2 (this branch)** — the rankings screen: season/week pickers (defaulting to the current week, falling back to the end of the latest season), position tabs, the ranked table with a factor-shape bar per row, legend, and a confidence guide. Address holds the state (`/?season=2025&week=10&position=WR`). The first 50 rows show, with "show all".
+- **Not yet built:** slice 3 player detail (rows will link there; there is deliberately no chevron or link until it exists), slice 4 compare, slice 5 trade analyzer, slice 6 S3 + CloudFront + frontend deploy.
+
+Where the UI differs from the Figma, on purpose: no "generated at / model version" line (the API doesn't provide them), the legend names the six real factors instead of Passing/Rushing/Form/Opportunity, and the confidence text states the real rule (count of factors with data).
+
+Node isn't installed locally at a usable version (host has 19): run npm and Vite in a `node:22-alpine` container. The dev server needs `-e VITE_USE_POLLING=1` there, or edits don't reach it. See `frontend/README.md`.
+
 ## Pending: first apply of PR #29
 
 The infra/profile changes in #29 are verified locally (the real image under the `aws` profile against throwaway Postgres/Redis; `terraform validate` + `fmt -check` in a container) but **not applied to real AWS**. At the next AWS session, in order:
@@ -49,7 +63,7 @@ The infra/profile changes in #29 are verified locally (the real image under the 
 ## What remains
 
 **Product:**
-- **Phase 8, the frontend** — nothing built. The big one.
+- **Phase 8, the frontend** — slices 0-2 built; player detail, compare, trade analyzer and hosting remain.
 - **No START/SIT verdict** — `GET /recommendations/start-sit` returns a score and a LOW/MEDIUM/HIGH confidence (just a count of available factors, which nothing consumes), no verdict. The PRD wanted START / SIT / TOSS-UP.
 - **A full week's response is ~400 KB** (800 players, no pagination); a cache hit still takes ~0.12s for that payload. A UI should request one position at a time, or the API should gain a `limit`.
 - Waiver-wire analyzer (`analytics/waiver` is an empty placeholder); K/DST support (needs a different ESPN endpoint).
@@ -75,7 +89,7 @@ The infra/profile changes in #29 are verified locally (the real image under the 
 
 ## Recommended next steps
 
-1. **Phase 8, the frontend.** Decisions to settle first: the stack (React was assumed in the docs, nothing's chosen); the first screen (suggested: login → a week's ranked list with a position filter → a player page showing the factor breakdown); where the START/SIT verdict comes from (backend, or derived in the UI from rank within position); how to avoid the 400 KB response.
+1. **Phase 8, the frontend** — slice 3 next (player detail with the factor breakdown).
 2. **The first real AWS apply of #29**, following the checklist above, before building on it.
 3. Smaller items from "What remains" as they become relevant.
 
