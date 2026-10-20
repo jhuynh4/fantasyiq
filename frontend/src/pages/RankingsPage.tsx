@@ -1,60 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown } from 'lucide-react'
-import type { KeyboardEvent, ReactNode } from 'react'
+import type { KeyboardEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { apiFetch } from '../api/client.ts'
 import { fetchStartSit } from '../api/recommendations.ts'
-import type { CurrentWeek, Position } from '../api/types.ts'
+import type { Position } from '../api/types.ts'
+import { PeriodPickers } from '../components/PeriodPickers.tsx'
 import { FactorLegend, ConfidenceGuide } from '../features/rankings/RankingsKey.tsx'
 import { RankingsTable } from '../features/rankings/RankingsTable.tsx'
-import {
-  POSITION_PLURALS,
-  POSITIONS,
-  WEEKS,
-  fallbackWeek,
-  parseInteger,
-  parsePosition,
-  seasonOptions,
-} from '../features/rankings/period.ts'
-
-function Picker({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string
-  value: number
-  onChange: (value: number) => void
-  children: ReactNode
-}) {
-  return (
-    <label className="picker">
-      <span className="visually-hidden">{label}</span>
-      <select value={value} onChange={(event) => onChange(Number(event.target.value))}>
-        {children}
-      </select>
-      <ChevronDown size={14} aria-hidden="true" />
-    </label>
-  )
-}
+import { POSITION_PLURALS, POSITIONS, parsePosition } from '../features/rankings/period.ts'
+import { useWeekSelection } from '../features/rankings/useWeekSelection.ts'
 
 export function RankingsPage() {
   const [params, setParams] = useSearchParams()
   const position = parsePosition(params.get('position'))
-  const requestedSeason = parseInteger(params.get('season'), 2000, 2100)
-  const requestedWeek = parseInteger(params.get('week'), 1, 18)
-
-  const needsDefault = requestedSeason === null || requestedWeek === null
-  const currentWeek = useQuery({
-    queryKey: ['current-week'],
-    queryFn: () => apiFetch<CurrentWeek>('/api/weeks/current'),
-    enabled: needsDefault,
-  })
-
-  const fallback: CurrentWeek | null = needsDefault && currentWeek.isSuccess ? (currentWeek.data ?? fallbackWeek()) : null
-  const season = requestedSeason ?? fallback?.season ?? null
-  const week = requestedWeek ?? fallback?.week ?? null
+  const { season, week, resolving, error: weekError } = useWeekSelection(params)
 
   const rankings = useQuery({
     queryKey: ['start-sit', season, week, position],
@@ -80,7 +38,6 @@ export function RankingsPage() {
   }
 
   const rows = rankings.data ?? []
-  const resolving = needsDefault && currentWeek.isPending
   const ready = season !== null && week !== null
   const loading = resolving || (ready && rankings.isPending)
 
@@ -90,22 +47,12 @@ export function RankingsPage() {
         <div className="title-row">
           <h1 className="page-title">Weekly rankings</h1>
           {ready && (
-            <div className="pickers">
-              <Picker label="Season" value={season} onChange={(value) => update({ season: value })}>
-                {seasonOptions(season).map((option) => (
-                  <option key={option} value={option}>
-                    Season {option}
-                  </option>
-                ))}
-              </Picker>
-              <Picker label="Week" value={week} onChange={(value) => update({ week: value })}>
-                {WEEKS.map((option) => (
-                  <option key={option} value={option}>
-                    Week {option}
-                  </option>
-                ))}
-              </Picker>
-            </div>
+            <PeriodPickers
+              season={season}
+              week={week}
+              onSeasonChange={(value) => update({ season: value })}
+              onWeekChange={(value) => update({ week: value })}
+            />
           )}
         </div>
         <p className="muted">A clear view of player value, with every contribution in the open.</p>
@@ -142,9 +89,9 @@ export function RankingsPage() {
           </div>
 
           {loading && <p className="panel-status">Loading rankings…</p>}
-          {currentWeek.isError && (
+          {weekError && (
             <p className="form-error panel-status" role="alert">
-              {currentWeek.error.message}
+              {weekError.message}
             </p>
           )}
           {rankings.isError && (
@@ -160,7 +107,11 @@ export function RankingsPage() {
           )}
           {rows.length > 0 && (
             <>
-              <RankingsTable key={`${season}-${week}-${position}`} rows={rows} />
+              <RankingsTable
+                key={`${season}-${week}-${position}`}
+                rows={rows}
+                linkQuery={`season=${season}&week=${week}`}
+              />
               <FactorLegend />
             </>
           )}

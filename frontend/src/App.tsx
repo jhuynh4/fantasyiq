@@ -3,6 +3,7 @@ import { RequireAuth } from './auth/RequireAuth.tsx'
 import { AppShell } from './components/AppShell.tsx'
 import { ComparePage } from './pages/ComparePage.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
+import { PlayerPage } from './pages/PlayerPage.tsx'
 import { RankingsPage } from './pages/RankingsPage.tsx'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<RankingsPage />} />
+          <Route path="players/:id" element={<PlayerPage />} />
           <Route path="compare" element={<ComparePage />} />
         </Route>
       </Route>

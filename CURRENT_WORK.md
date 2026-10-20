@@ -42,8 +42,9 @@ Decided: React + Vite + TypeScript static app; sign-in, a week's ranked list wit
 - **Slice 0 (#33)** — `GET /api/weeks/current`: `{season, week}`, or 204 when there is no current week.
 - **Dev stack (#34)** — `docker compose --profile app up -d --build` runs Postgres, Redis and the backend (admin `admin@fantasyiq.dev` / `local-admin-passphrase`). The local database holds the full 2025 season but nothing for the current week, so build and check screens against 2025.
 - **Slice 1 (#35)** — Vite app, Figma design tokens (light/dark), API client (in-memory access token, refresh token in localStorage, refresh ahead of expiry, one shared refresh, one retry on 401), sign-in/register, app shell, `frontend` CI job.
-- **Slice 2 (this branch)** — the rankings screen: season/week pickers (defaulting to the current week, falling back to the end of the latest season), position tabs, the ranked table with a factor-shape bar per row, legend, and a confidence guide. Address holds the state (`/?season=2025&week=10&position=WR`). The first 50 rows show, with "show all".
-- **Not yet built:** slice 3 player detail (rows will link there; there is deliberately no chevron or link until it exists), slice 4 compare, slice 5 trade analyzer, slice 6 S3 + CloudFront + frontend deploy.
+- **Slice 2 (#36)** — the rankings screen: season/week pickers (defaulting to the current week, falling back to the end of the latest season), position tabs, the ranked table with a factor-shape bar per row, legend, and a confidence guide. Address holds the state (`/?season=2025&week=10&position=WR`). The first 50 rows show, with "show all".
+- **Slice 3 (this branch)** — player detail at `/players/:id?season=&week=`. Rows in the rankings link there (whole row is the target). It shows the profile (`GET /api/players/{id}`), the player's rank within their position and score, "Why this score" (each factor's contribution as a signed bar, plus the backend's own `narrative` text), the full arithmetic line, and a side card explaining confidence. The factors come from the same start-sit query the rankings screen runs (position taken from the profile), so arriving from the list costs no extra request; a player with no score that week gets a message. A ruled-out player's -1000 injury penalty is shown as "Out" with a full-lane bar.
+- **Not yet built:** slice 4 compare ("Compare player" button on the detail page goes with it), slice 5 trade analyzer, slice 6 S3 + CloudFront + frontend deploy.
 
 Where the UI differs from the Figma, on purpose: no "generated at / model version" line (the API doesn't provide them), the legend names the six real factors instead of Passing/Rushing/Form/Opportunity, and the confidence text states the real rule (count of factors with data).
 
@@ -75,6 +76,7 @@ The infra/profile changes in #29 are verified locally (the real image under the 
 - Role changes take up to the 15-minute token lifetime to apply.
 - Trade analyzer: the injury factor's -1000 makes a short-term OUT player worth catastrophic value over a rest-of-season horizon; `computeReplacementLevels` is N+1 (~3.3s per request).
 - Backtest: N+1 inside `gatherFactors` (~18 min for a full season), and `RecommendationMatcher` does one lookup per recommendation (~800 statements for a week).
+- `GET /api/players/{id}` with an id that isn't a UUID returns 500 (the catch-all handler) instead of 400; the UI checks the format first.
 - `refresh_tokens` is never cleaned up; no `EspnInjuryProvider` contract test.
 - The model: `MATCHUP` and `USAGE` show ~no signal in backtests, `VEGAS` and `WEATHER` have never been backtestable (no historical data), and the composite (0.31) is below the best single factor (0.54) — not a like-for-like comparison (different subsets of players), but a hint the weaker factors add noise. Weights are hand-picked except `RECENT_PERFORMANCE`.
 
@@ -89,7 +91,7 @@ The infra/profile changes in #29 are verified locally (the real image under the 
 
 ## Recommended next steps
 
-1. **Phase 8, the frontend** — slice 3 next (player detail with the factor breakdown).
+1. **Phase 8, the frontend** — slice 4 next (head-to-head compare).
 2. **The first real AWS apply of #29**, following the checklist above, before building on it.
 3. Smaller items from "What remains" as they become relevant.
 

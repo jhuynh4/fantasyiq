@@ -36,3 +36,14 @@ export function seasonOptions(selected: number, now: Date = new Date()): number[
   const seasons = [latest, latest - 1, latest - 2]
   return seasons.includes(selected) ? seasons : [selected, ...seasons]
 }
+
+export const POSITION_NAMES: Record<Position, string> = {
+  QB: 'Quarterback',
+  RB: 'Running back',
+  WR: 'Wide receiver',
+  TE: 'Tight end',
+}
+
+export function isPosition(value: string): value is Position {
+  return POSITIONS.some((position) => position === value)
+}

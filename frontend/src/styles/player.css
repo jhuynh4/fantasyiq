@@ -1,0 +1,251 @@
+.select-hint {
+  margin: 0;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.player-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.breadcrumb-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.player-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px;
+}
+.player-identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.roster-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-badge {
+  padding: 3px 6px;
+  border-radius: var(--radius-badge);
+  background: var(--subtle);
+  font-size: 10px;
+}
+.status-active {
+  color: var(--positive);
+}
+.player-identity h1 {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.score-standing {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+.model-score {
+  font-size: 44px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.standing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+.rank-line {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.evidence-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.evidence {
+  min-width: 0;
+  overflow: hidden;
+}
+.evidence-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+}
+.evidence-heading h2 {
+  font-size: 21px;
+  font-weight: 600;
+}
+.factor-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.factor-row {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 18px 20px;
+  border-top: 1px solid var(--border);
+}
+.factor-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.factor-title h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.factor-points {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.signed-bar {
+  position: relative;
+  width: 100%;
+  max-width: 390px;
+  height: 16px;
+}
+.signed-track {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--subtle);
+}
+.signed-fill {
+  position: absolute;
+  top: 4px;
+  height: 8px;
+  border-radius: 2px;
+}
+.fill-positive {
+  background: var(--positive);
+}
+.fill-negative {
+  background: var(--negative);
+}
+.signed-zero {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 16px;
+  background: var(--muted);
+}
+
+.math-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  background: var(--accent-tint);
+}
+.accent {
+  color: var(--accent);
+}
+.math-line {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.score-context {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+.score-context h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.context-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.context-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (min-width: 900px) {
+  .breadcrumb-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .player-summary {
+    flex-direction: row;
+    align-items: center;
+    gap: 32px;
+    padding: 28px;
+  }
+  .player-identity h1 {
+    font-size: 38px;
+  }
+  .score-standing {
+    width: 390px;
+    flex-shrink: 0;
+  }
+  .model-score {
+    font-size: 52px;
+  }
+  .evidence-layout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .evidence {
+    flex: 1;
+  }
+  .evidence-heading {
+    padding: 24px;
+  }
+  .factor-row {
+    padding: 18px 24px;
+  }
+  .math-box {
+    padding: 24px;
+  }
+  .score-context {
+    width: 304px;
+    flex-shrink: 0;
+    padding: 24px;
+  }
+}

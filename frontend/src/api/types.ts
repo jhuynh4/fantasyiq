@@ -35,3 +35,14 @@ export interface StartSitRecommendation {
   confidence: Confidence
   factors: Factor[]
 }
+
+export interface PlayerDetail {
+  id: string
+  fullName: string
+  position: string
+  team: string | null
+  jerseyNumber: number | null
+  /** As reported by the source, e.g. ACTIVE or DAY-TO-DAY. */
+  status: string | null
+  birthDate: string | null
+}
