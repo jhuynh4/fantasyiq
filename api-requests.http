@@ -88,6 +88,12 @@ Content-Type: application/json
   "refreshToken": "{{oldRefreshToken}}"
 }
 
+### Current week -- {season, week} of the next game (or one that kicked off in the last 6 hours),
+### the same week the daily scoring job uses. 204 No Content with no body when there isn't one
+### (the offseason, or after the final week) -- not an error.
+GET {{baseUrl}}/api/weeks/current
+Authorization: Bearer {{accessToken}}
+
 ### Admin login -- replaces {{accessToken}} with an admin token so the trigger requests below work
 # @name adminLogin
 POST {{baseUrl}}/api/auth/login
