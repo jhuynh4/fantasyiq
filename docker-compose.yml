@@ -29,6 +29,51 @@ services:
       timeout: 5s
       retries: 10
 
+  # The backend itself, for when you don't want to run it from an IDE (e.g. while building the
+  # frontend). Behind a profile so a plain `docker compose up -d` still starts only Postgres and
+  # Redis, as before:
+  #   docker compose --profile app up -d --build      # build and start everything
+  #   docker compose --profile app up -d --build app  # rebuild just the backend after a code change
+  # Uses the "local" profile (readable logs) with every connection setting overridden by an
+  # environment variable, since application-local.yml points at localhost, which inside a
+  # container means the container itself.
+  app:
+    profiles: ["app"]
+    build: .
+    image: fantasyiq-app:dev
+    container_name: fantasyiq-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fantasyiq
+      SPRING_DATASOURCE_USERNAME: fantasyiq
+      SPRING_DATASOURCE_PASSWORD: fantasyiq
+      SPRING_DATA_REDIS_HOST: redis
+      # Development-only values. Override by exporting them (or a gitignored .env file) before
+      # running compose; the admin account is created on first start if it doesn't exist.
+      JWT_SECRET: ${JWT_SECRET:-development-only-jwt-secret-not-for-any-real-environment}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@fantasyiq.dev}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-local-admin-passphrase}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      ODDS_API_KEY: ${ODDS_API_KEY:-}
+      # The local profile logs every SQL statement, which drowns out everything else while
+      # working on a UI. Passed as JSON because Spring lowercases env var names, so a
+      # LOGGING_LEVEL_ORG_HIBERNATE_SQL variable would silently target the wrong logger.
+      SPRING_APPLICATION_JSON: '{"logging.level.org.hibernate.SQL":"INFO"}'
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
   # Optional local observability stack (Phase 6) — commented out until you get there.
   # prometheus:
   #   image: prom/prometheus:latest
