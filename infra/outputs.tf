@@ -42,11 +42,6 @@ output "odds_api_key_secret_arn" {
   value = aws_secretsmanager_secret.odds_api_key.arn
 }
 
-output "app_url" {
-  description = "The app's public URL, once the ECS service is healthy behind it."
-  value       = "http://${aws_lb.main.dns_name}"
-}
-
 output "github_actions_role_arn" {
   description = "Referenced directly in .github/workflows/deploy.yml -- stable across applies since it's a deterministic name, not a generated id."
   value       = aws_iam_role.github_actions_deploy.arn
@@ -68,7 +63,7 @@ output "dashboard_url" {
 }
 
 output "frontend_url" {
-  description = "The app, served over HTTPS by CloudFront. The API is reachable at the same address under /api."
+  description = "The app, served over HTTPS by CloudFront. The API is reachable at the same address under /api. The load balancer is no longer reachable on its own: it only accepts CloudFront, with a secret header."
   value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
 }
 

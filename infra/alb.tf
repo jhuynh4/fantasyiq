@@ -32,14 +32,39 @@ resource "aws_lb_target_group" "app" {
 }
 
 # Plain HTTP -- HTTPS needs a real domain name and an ACM certificate,
-# neither of which this project has yet. Fine for verifying the deployment
-# mechanics; add before pointing real users at it.
+# neither of which this project has yet. Only CloudFront can reach this
+# listener (security.tf), and anything it forwards that doesn't carry the
+# secret header from frontend.tf is refused: the address ranges cover every
+# CloudFront distribution, so someone else's distribution pointed at this
+# load balancer would otherwise get through.
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Forbidden"
+      status_code  = "403"
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "from_our_cloudfront" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 1
+
+  condition {
+    http_header {
+      http_header_name = local.origin_verify_header
+      values           = [random_password.origin_verify.result]
+    }
+  }
+
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app.arn
   }

@@ -1,5 +1,18 @@
 data "aws_caller_identity" "current" {}
 
+# A shared secret CloudFront adds to every request it sends to the API and the
+# load balancer insists on. Synthetic and generated here, like the JWT secret;
+# it lives in Terraform state and the distribution's configuration, and a new
+# one is made whenever the stack is recreated.
+locals {
+  origin_verify_header = "X-Origin-Verify"
+}
+
+resource "random_password" "origin_verify" {
+  length  = 40
+  special = false
+}
+
 # The built frontend: plain static files, served only through CloudFront (the
 # bucket itself is private). Named with the account id because S3 bucket names
 # are global, and the deploy workflow needs a name that doesn't change between
@@ -95,6 +108,11 @@ resource "aws_cloudfront_distribution" "frontend" {
   origin {
     origin_id   = "api"
     domain_name = aws_lb.main.dns_name
+
+    custom_header {
+      name  = local.origin_verify_header
+      value = random_password.origin_verify.result
+    }
 
     custom_origin_config {
       http_port              = 80
