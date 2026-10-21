@@ -73,13 +73,25 @@ public class IngestionRunService {
                 run.markFailed(e.getMessage());
                 ingestionRunRepository.save(run);
                 long elapsedNanos = recordDuration(sample, source, "failure");
-                log.error("Ingestion run failed: source={} durationMs={} error={}",
-                        source, TimeUnit.NANOSECONDS.toMillis(elapsedNanos), e.toString());
+                // The exception goes in as the last argument so the full chain (with every
+                // "Caused by") is logged. Vendor adapters wrap the real failure -- an SSL
+                // error, a 403 -- in a one-line "endpoint unavailable" message, and without
+                // the chain that cause appears nowhere in the logs.
+                log.error("Ingestion run failed: source={} durationMs={} error={} rootCause={}",
+                        source, TimeUnit.NANOSECONDS.toMillis(elapsedNanos), e.toString(), rootCauseOf(e), e);
                 throw e;
             }
         } finally {
             MDC.remove(MDC_KEY);
         }
+    }
+
+    private static String rootCauseOf(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        return root.toString();
     }
 
     private long recordDuration(Timer.Sample sample, String source, String outcome) {
