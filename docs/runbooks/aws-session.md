@@ -8,7 +8,7 @@ The stack costs money while it exists, so every session follows the same shape: 
 
 Plan for about two hours, most of it waiting on RDS, ElastiCache and CloudFront. While the stack is up it costs roughly 10-15 cents an hour (RDS, ElastiCache, the ALB and a small Fargate task; S3 and CloudFront are close to free at this size), so a long session is cheap and a forgotten stack is the real cost: **do the destroy at the end (step 12) even if something failed.**
 
-Commands are for a bash shell (Git Bash is fine) unless stated. Run Terraform from `infra/`.
+Commands are for a bash shell (Git Bash is fine) unless stated. Run Terraform from `infra/`. **On Windows PowerShell use the equivalents in the appendix at the end:** several bash commands do not work there (`read -rsp`, `$(...)` inside strings, and `-out=session.plan` is split at the dot unless it is quoted).
 
 ## 0. Before you start
 
@@ -74,6 +74,14 @@ You will use `frontend_url`, `frontend_bucket`, `admin_email`, `admin_password_s
 AWS emails `alert_email` a subscription confirmation. **Click the link**, or the alarms will never notify you.
 
 Right now there is no image in ECR, so the ECS task cannot start. That is useful for one check: the **no-healthy-hosts alarm** (`fantasyiq-alb-no-healthy-hosts`) should go to `ALARM` about 5 minutes after the service is created and send you an email. If you want to verify that, wait here (check the alarm in the CloudWatch console) before continuing. If you do not care, go straight on; the alarm will clear itself once a task is healthy.
+
+**Check that the confirmation really happened.** In session 1 the confirmation email never arrived, so both alarm actions sat at "Pending confirmation" for the whole session and no alarm could have notified anyone; it only showed up at the end. Check now:
+
+```bash
+aws sns list-subscriptions-by-topic --topic-arn $(aws sns list-topics --query "Topics[?contains(TopicArn,'fantasyiq-alerts')].TopicArn | [0]" --output text)
+```
+
+`SubscriptionArn` should be a real ARN, not `PendingConfirmation`. If it is still pending: search the inbox and spam for `sns.amazonaws.com`; check that `Endpoint` is the right address (a typo in `terraform.tfvars` is the likeliest cause); or open the SNS console, select the subscription and choose **Request confirmation** to have the email sent again.
 
 ## 4. Deploy (backend image and frontend)
 
@@ -200,8 +208,7 @@ A fresh database is empty. Load the **current season** (2026 at the time of writ
 ```bash
 SEASON=2026
 WEEK=7
-post() { curl -s -m 600 -o /dev/null -w "%{http_code}
-" -X POST -H "Authorization: Bearer $TOKEN" "$URL$1"; }
+post() { curl -s -m 600 -o /dev/null -w "%{http_code}\n" -X POST -H "Authorization: Bearer $TOKEN" "$URL$1"; }
 post "/api/players/ingest"
 post "/api/games/ingest?season=$SEASON"
 post "/api/injuries/ingest"
@@ -213,7 +220,7 @@ Then the long one, box scores for every player, for the weeks already played:
 post "/api/player-game-stats/ingest?season=$SEASON"
 ```
 
-**Expect this one to answer `504`.** It makes hundreds of ESPN calls and takes minutes, but CloudFront gives up on an origin after 60 seconds (and the load balancer's idle timeout is 60 seconds too). The job itself keeps running on the server and writes its audit row either way. **Do not run it again.** Watch it finish:
+**This is the slowest job, but in session 1 it finished well inside the limit and answered `200`.** Measured: players 2,553 records in 42 s, games 272 in 14 s, injuries 460 in 9.5 s, box scores 2,382 in 39.5 s (six played weeks; it grows as the season goes on). CloudFront gives up on an origin after 60 seconds (and the load balancer's idle timeout is 60 seconds too), so a slower run answers `504` while the job keeps running on the server and writes its audit row either way. **If you see a `504`, do not run it again.** Watch it finish:
 
 ```bash
 aws logs tail /ecs/fantasyiq --since 30m --follow --filter-pattern "Ingestion run"
@@ -230,7 +237,19 @@ post "/api/recommendations/generate?season=$SEASON&week=$WEEK"
 
 Weather and odds have no scheduled job, so they are only ever loaded by hand like this (a known gap in `CURRENT_WORK.md`). Games in domes get no forecast, by design. If either returns `503`, the key is wrong or the vendor is unavailable; the log line says which.
 
-If `players/ingest` or any ESPN step fails with `503`: **ESPN's edge sometimes blocks cloud IP addresses.** The app has only ever called ESPN from a home network. If the logs show `EspnUnavailableException` with a 403 from ESPN, the deployed app cannot ingest on its own and the rest of this step is blocked. That is a real finding, not a bug in this session: write it down, skip to step 9 with whatever loaded, and decide afterwards how to get data in (a dump restored from the local database, or a proxy).
+If `players/ingest` or any ESPN step fails with `503`, get the real cause before doing anything else. A failed run logs `rootCause=...` and the full stack trace:
+
+```bash
+aws logs tail /ecs/fantasyiq --since 10m --filter-pattern "rootCause"
+```
+
+**Session 1 hit exactly this.** Every ESPN job failed with `403 Forbidden: Access Denied` (an Akamai error page), because with no `User-Agent` configured the JDK's older HTTP class announces itself as `Java/21.x`, and ESPN's edge refuses that name from cloud addresses (it never did from a home network). It is fixed: the app now sends `FantasyIQ/1.0` on every vendor call (`fantasyiq.http-client.user-agent`). To tell a name-based block from a block on all AWS addresses, open **AWS CloudShell** (it runs on an AWS address) and try different names. In session 1, `Java/21.0.5` got `403` while `Java-http-client/21.0.5`, `FantasyIQ/1.0` and `curl` all got `200`:
+
+```bash
+for ua in "Java-http-client/21.0.5" "Java/21.0.5" "FantasyIQ/1.0" "curl/8.5.0"; do echo -n "$ua  ->  "; curl -s -o /dev/null -w "%{http_code}\n" -m 15 -A "$ua" "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams"; done
+```
+
+If a plain `curl` from CloudShell also gets `403`, ESPN is blocking AWS addresses outright: write it down, skip to step 9 with whatever loaded, and decide afterwards how to get data in (a dump restored from the local database, or a proxy). Do not keep re-running a failing job: after enough failures the circuit breaker opens and refuses calls for 30 seconds.
 
 ### Check the logging (PR #29)
 
@@ -319,3 +338,141 @@ After this, the **Deploy workflow shows a red X on every push to `main`** until 
 | Secrets | `fantasyiq/jwt-secret`, `fantasyiq/admin-password`, `fantasyiq/openweather-api-key`, `fantasyiq/odds-api-key` |
 | Deploy role | `fantasyiq-github-deploy` |
 | Alarms | `fantasyiq-alb-5xx`, `-alb-unhealthy-hosts`, `-alb-no-healthy-hosts`, `-ecs-cpu-high`, `-rds-cpu-high` |
+
+## Appendix: Windows PowerShell equivalents
+
+These are the commands as they were actually run in session 1. Use `curl.exe`, not `curl`: in PowerShell `curl` is a different command.
+
+Plan, with the argument quoted (otherwise it is split at the dot):
+
+```powershell
+terraform plan "-out=session.plan"
+```
+
+Variables used by the later steps:
+
+```powershell
+$URL = terraform output -raw frontend_url
+```
+
+```powershell
+$password = aws secretsmanager get-secret-value --secret-id fantasyiq/admin-password --query SecretString --output text
+```
+
+Vendor keys, typed at a hidden prompt (repeat with `fantasyiq/odds-api-key` for the second key):
+
+```powershell
+$s = Read-Host "OpenWeatherMap key" -AsSecureString; $k = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)); aws secretsmanager put-secret-value --secret-id fantasyiq/openweather-api-key --secret-string $k | Out-Null; Remove-Variable k,s
+```
+
+Restart the task so it reads the new secrets, then wait:
+
+```powershell
+aws ecs update-service --cluster fantasyiq --service fantasyiq --force-new-deployment | Out-Null
+```
+
+```powershell
+aws ecs wait services-stable --cluster fantasyiq --services fantasyiq
+```
+
+The log lines that prove the backend is healthy (step 5), and a count of SQL statements that should be 0:
+
+```powershell
+aws logs tail /ecs/fantasyiq --since 30m | Select-String "Started FantasyIq|Created admin|migrat|Flyway|Successfully applied"
+```
+
+```powershell
+aws logs tail /ecs/fantasyiq --since 30m | Select-String "org.hibernate.SQL" | Measure-Object
+```
+
+Front-door checks (step 7):
+
+```powershell
+curl.exe -si "$URL/api/players/00000000-0000-0000-0000-000000000000" | Select-Object -First 12
+```
+
+```powershell
+curl.exe -sI "$URL/" | Select-String -Pattern "^(HTTP|cache-control|x-cache|strict-transport)"
+```
+
+```powershell
+$asset = (curl.exe -s "$URL/" | Select-String -Pattern 'assets/[^"]*\.js').Matches[0].Value; curl.exe -sI "$URL/$asset" | Select-String -Pattern "^(HTTP|cache-control)"
+```
+
+The closed load balancer: this should time out, and the last line should print `28`:
+
+```powershell
+$alb = aws elbv2 describe-load-balancers --names fantasyiq-alb --query "LoadBalancers[0].DNSName" --output text; curl.exe -m 10 -si "http://$alb/api/auth/login"; $LASTEXITCODE
+```
+
+Sign in as the admin, and a helper that posts to an endpoint and prints only the status code (step 8). The token lasts 15 minutes; run the first line again when it expires:
+
+```powershell
+$body = @{ email = "admin@fantasyiq.dev"; password = $password } | ConvertTo-Json; $token = (Invoke-RestMethod -Method Post -Uri "$URL/api/auth/login" -ContentType "application/json" -Body $body).accessToken; $token.Substring(0,20)
+```
+
+```powershell
+function Post($path) { try { (Invoke-WebRequest -Method Post -Uri "$URL$path" -Headers @{Authorization="Bearer $token"} -TimeoutSec 600 -UseBasicParsing).StatusCode } catch { if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { $_.Exception.Message } } }; $season = 2026; $week = 7
+```
+
+Load the data, in order (each should print `200`), then the computed steps:
+
+```powershell
+Post "/api/players/ingest"
+```
+
+```powershell
+Post "/api/games/ingest?season=$season"
+```
+
+```powershell
+Post "/api/injuries/ingest"
+```
+
+```powershell
+Post "/api/player-game-stats/ingest?season=$season"
+```
+
+```powershell
+1..($week - 1) | ForEach-Object { "week $_ : " + (Post "/api/defense-vs-position/compute?season=$season&week=$_") }
+```
+
+```powershell
+Post "/api/weather/ingest?season=$season&week=$week"
+```
+
+```powershell
+Post "/api/odds/ingest"
+```
+
+```powershell
+Post "/api/recommendations/generate?season=$season&week=$week"
+```
+
+The weeks before the current one can be generated too, so the week picker has something to show (each prints `200`; earlier weeks use today's injury status, so a player who is out now shows as out in every earlier week):
+
+```powershell
+1..($week - 1) | ForEach-Object { "week $_ : " + (Post "/api/recommendations/generate?season=$season&week=$_") }
+```
+
+Check that the vendor factors reached a score (look for `VEGAS` and `WEATHER` among the factors):
+
+```powershell
+(Invoke-RestMethod -Uri "$URL/api/recommendations/start-sit?season=$season&week=$week&position=QB" -Headers @{Authorization="Bearer $token"})[0] | ConvertTo-Json -Depth 5
+```
+
+The rate limit: eleven wrong logins, expecting ten `401`s and then a `429`:
+
+```powershell
+1..11 | ForEach-Object { try { (Invoke-WebRequest -Method Post -Uri "$URL/api/auth/login" -ContentType "application/json" -Body '{"email":"nobody@example.com","password":"wrong-password"}' -UseBasicParsing).StatusCode } catch { [int]$_.Exception.Response.StatusCode } }
+```
+
+A normal account must get `403` from an admin endpoint:
+
+```powershell
+$r = Invoke-RestMethod -Method Post -Uri "$URL/api/auth/register" -ContentType "application/json" -Body (@{ email = "viewer@example.com"; password = "throwaway-passphrase-1"; displayName = "Viewer" } | ConvertTo-Json); $viewer = $r.accessToken
+```
+
+```powershell
+try { Invoke-WebRequest -Method Post -Uri "$URL/api/players/ingest" -Headers @{Authorization="Bearer $viewer"} -UseBasicParsing } catch { [int]$_.Exception.Response.StatusCode }
+```
