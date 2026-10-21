@@ -5,6 +5,7 @@ import { ComparePage } from './pages/ComparePage.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { PlayerPage } from './pages/PlayerPage.tsx'
 import { RankingsPage } from './pages/RankingsPage.tsx'
+import { TradePage } from './pages/TradePage.tsx'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Route index element={<RankingsPage />} />
           <Route path="players/:id" element={<PlayerPage />} />
           <Route path="compare" element={<ComparePage />} />
+          <Route path="trade" element={<TradePage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

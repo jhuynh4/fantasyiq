@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Columns2, ListOrdered } from 'lucide-react'
+import { ArrowLeftRight, Columns2, ListOrdered } from 'lucide-react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.tsx'
 import { Logo } from './Logo.tsx'
@@ -74,6 +74,10 @@ export function AppShell() {
           <NavLink to="/compare">
             <Columns2 size={18} aria-hidden="true" />
             Compare
+          </NavLink>
+          <NavLink to="/trade">
+            <ArrowLeftRight size={18} aria-hidden="true" />
+            Trade
           </NavLink>
         </nav>
         <div className="header-actions">

@@ -15,13 +15,13 @@ const TYPING_PAUSE_MS = 250
 export function PlayerPicker({
   label,
   onlyPosition,
-  excludeId,
+  excludeIds,
   onPick,
   autoFocus = false,
 }: {
   label: string
   onlyPosition: Position | null
-  excludeId: string | null
+  excludeIds: string[]
   onPick: (player: PlayerSummary) => void
   autoFocus?: boolean
 }) {
@@ -40,7 +40,7 @@ export function PlayerPicker({
   })
 
   const results = (search.data ?? []).filter(
-    (player) => isPosition(player.position) && (onlyPosition === null || player.position === onlyPosition) && player.id !== excludeId,
+    (player) => isPosition(player.position) && (onlyPosition === null || player.position === onlyPosition) && !excludeIds.includes(player.id),
   )
   const searching = query.length >= MIN_QUERY_LENGTH
 
