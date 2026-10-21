@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Columns2 } from 'lucide-react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../api/client.ts'
 import { fetchPlayer } from '../api/players.ts'
@@ -50,6 +50,10 @@ function Summary({
         <p className="muted">
           {season !== null && week !== null ? `Weekly score breakdown · Season ${season}, week ${week}` : 'Weekly score breakdown'}
         </p>
+        <Link className="secondary-button" to={`/compare?${new URLSearchParams({ ...(season !== null && week !== null ? { season: String(season), week: String(week) } : {}), a: player.id })}`}>
+          <Columns2 size={16} aria-hidden="true" />
+          Compare player
+        </Link>
       </div>
       {recommendation && (
         <div className="score-standing">

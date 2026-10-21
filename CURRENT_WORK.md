@@ -43,8 +43,9 @@ Decided: React + Vite + TypeScript static app; sign-in, a week's ranked list wit
 - **Dev stack (#34)** — `docker compose --profile app up -d --build` runs Postgres, Redis and the backend (admin `admin@fantasyiq.dev` / `local-admin-passphrase`). The local database holds the full 2025 season but nothing for the current week, so build and check screens against 2025.
 - **Slice 1 (#35)** — Vite app, Figma design tokens (light/dark), API client (in-memory access token, refresh token in localStorage, refresh ahead of expiry, one shared refresh, one retry on 401), sign-in/register, app shell, `frontend` CI job.
 - **Slice 2 (#36)** — the rankings screen: season/week pickers (defaulting to the current week, falling back to the end of the latest season), position tabs, the ranked table with a factor-shape bar per row, legend, and a confidence guide. Address holds the state (`/?season=2025&week=10&position=WR`). The first 50 rows show, with "show all".
-- **Slice 3 (this branch)** — player detail at `/players/:id?season=&week=`. Rows in the rankings link there (whole row is the target). It shows the profile (`GET /api/players/{id}`), the player's rank within their position and score, "Why this score" (each factor's contribution as a signed bar, plus the backend's own `narrative` text), the full arithmetic line, and a side card explaining confidence. The factors come from the same start-sit query the rankings screen runs (position taken from the profile), so arriving from the list costs no extra request; a player with no score that week gets a message. A ruled-out player's -1000 injury penalty is shown as "Out" with a full-lane bar.
-- **Not yet built:** slice 4 compare ("Compare player" button on the detail page goes with it), slice 5 trade analyzer, slice 6 S3 + CloudFront + frontend deploy.
+- **Slice 3 (#37)** — player detail at `/players/:id?season=&week=`. Rows in the rankings link there (whole row is the target). It shows the profile (`GET /api/players/{id}`), the player's rank within their position and score, "Why this score" (each factor's contribution as a signed bar, plus the backend's own `narrative` text), the full arithmetic line, and a side card explaining confidence. The factors come from the same start-sit query the rankings screen runs (position taken from the profile), so arriving from the list costs no extra request; a player with no score that week gets a message. A ruled-out player's -1000 injury penalty is shown as "Out" with a full-lane bar.
+- **Slice 4 (this branch)** — compare at `/compare?season=&week=&a=<id>&b=<id>` (ids in the address, so a comparison is a shareable link). The player page's "Compare player" button starts one with that player as the first. Each side is a card (profile, score, rank, confidence) with a search box (`GET /api/players/search`, results limited to the model's four positions and, once one player is chosen, to that position). Below: the score gap, a factor-by-factor table (each side's signed contribution, the difference, and a sentence), both players' full sums, and a "main trade-off" paragraph. The sentences and the paragraph are generated from the numbers (`features/compare/compare.ts`), not canned text. Players at different positions are allowed (via the address) but get a warning. A factor one player has no data for counts as zero and is labelled "No data".
+- **Not yet built:** slice 5 trade analyzer, slice 6 S3 + CloudFront + frontend deploy.
 
 Where the UI differs from the Figma, on purpose: no "generated at / model version" line (the API doesn't provide them), the legend names the six real factors instead of Passing/Rushing/Form/Opportunity, and the confidence text states the real rule (count of factors with data).
 
@@ -91,7 +92,7 @@ The infra/profile changes in #29 are verified locally (the real image under the 
 
 ## Recommended next steps
 
-1. **Phase 8, the frontend** — slice 4 next (head-to-head compare).
+1. **Phase 8, the frontend** — slice 5 next (trade analyzer).
 2. **The first real AWS apply of #29**, following the checklist above, before building on it.
 3. Smaller items from "What remains" as they become relevant.
 
