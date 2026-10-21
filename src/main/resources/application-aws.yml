@@ -17,3 +17,11 @@ spring:
 logging:
   level:
     com.fantasyiq: INFO
+
+fantasyiq:
+  rate-limit:
+    auth:
+      # Browser -> CloudFront -> ALB -> app: each of the two appends the address it saw to
+      # X-Forwarded-For, so the real visitor is the second entry from the right (see ClientAddress).
+      # Without this every visitor shares the load balancer's address and so one rate-limit bucket.
+      forwarded-hops: 2

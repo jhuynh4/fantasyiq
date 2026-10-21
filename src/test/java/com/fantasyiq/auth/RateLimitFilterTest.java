@@ -18,7 +18,7 @@ class RateLimitFilterTest {
 
     @Test
     void allowsRequestsWithinCapacityAndRejectsBeyondIt() throws Exception {
-        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(2, 60), new ObjectMapper());
+        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(2, 60, 0), new ObjectMapper());
 
         assertThat(statusFor(filter, "/api/auth/login")).isEqualTo(200);
         assertThat(statusFor(filter, "/api/auth/login")).isEqualTo(200);
@@ -27,7 +27,7 @@ class RateLimitFilterTest {
 
     @Test
     void doesNotRateLimitPathsOutsideApiAuth() throws Exception {
-        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(1, 60), new ObjectMapper());
+        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(1, 60, 0), new ObjectMapper());
 
         assertThat(statusFor(filter, "/api/players/search")).isEqualTo(200);
         assertThat(statusFor(filter, "/api/players/search")).isEqualTo(200);
@@ -35,11 +35,37 @@ class RateLimitFilterTest {
 
     @Test
     void trackedSeparatelyPerClientIp() throws Exception {
-        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(1, 60), new ObjectMapper());
+        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(1, 60, 0), new ObjectMapper());
 
         assertThat(statusFor(filter, "/api/auth/login", "10.0.0.1")).isEqualTo(200);
         assertThat(statusFor(filter, "/api/auth/login", "10.0.0.2")).isEqualTo(200);
         assertThat(statusFor(filter, "/api/auth/login", "10.0.0.1")).isEqualTo(429);
+    }
+
+    @Test
+    void behindProxiesTracksTheRealVisitorRatherThanTheSharedLoadBalancerAddress() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(1, 60, 2), new ObjectMapper());
+
+        assertThat(statusForwarded(filter, "198.51.100.7, 130.176.0.5")).isEqualTo(200);
+        assertThat(statusForwarded(filter, "198.51.100.8, 130.176.0.5")).isEqualTo(200);
+        assertThat(statusForwarded(filter, "198.51.100.7, 130.176.0.9")).isEqualTo(429);
+    }
+
+    @Test
+    void rotatingTheClientWrittenPartOfTheHeaderDoesNotEscapeTheLimit() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(new RateLimitProperties(1, 60, 2), new ObjectMapper());
+
+        assertThat(statusForwarded(filter, "1.1.1.1, 198.51.100.7, 130.176.0.5")).isEqualTo(200);
+        assertThat(statusForwarded(filter, "2.2.2.2, 198.51.100.7, 130.176.0.5")).isEqualTo(429);
+    }
+
+    private int statusForwarded(RateLimitFilter filter, String forwardedFor) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr("10.0.1.25");
+        request.addHeader("X-Forwarded-For", forwardedFor);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request, response, new MockFilterChain());
+        return response.getStatus();
     }
 
     private int statusFor(RateLimitFilter filter, String path) throws Exception {

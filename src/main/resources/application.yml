@@ -65,6 +65,9 @@ fantasyiq:
     auth:
       capacity: 10
       period-seconds: 60
+      # Proxies in front of the app that append to X-Forwarded-For. None when run directly;
+      # the aws profile sets it for CloudFront plus the load balancer.
+      forwarded-hops: 0
 
 resilience4j:
   retry:
