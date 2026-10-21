@@ -46,3 +46,10 @@ The compose stack creates a development admin account (`admin@fantasyiq.dev`, pa
 The access token (15 minutes) is kept in memory only. The refresh token is stored in
 `localStorage` so a reload keeps you signed in. Refresh tokens are single-use, so concurrent
 requests share one refresh call, and a request that gets a 401 refreshes and retries once.
+
+## Deployment
+
+Merging to `main` runs the `frontend` job in `.github/workflows/deploy.yml`: it builds, uploads to the
+S3 bucket from `infra/frontend.tf` and invalidates the CloudFront cache. CloudFront serves the files and
+forwards `/api/*` to the backend, which is why the app can call `/api` with no CORS setup. After a
+fresh `terraform apply` the bucket is empty, so start the workflow by hand once from `main`.

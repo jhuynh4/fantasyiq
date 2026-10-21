@@ -7,6 +7,10 @@ name: Deploy
 on:
   push:
     branches: [main]
+  # After a fresh `terraform apply` nothing is deployed until something runs
+  # this; running it by hand from main (Actions tab) saves a throwaway commit.
+  # The role's trust policy still requires the run to be on main.
+  workflow_dispatch:
 
 # id-token: write is what lets this workflow request an OIDC token from
 # GitHub and exchange it for short-lived AWS credentials -- without it,
@@ -22,6 +26,9 @@ env:
   ECS_SERVICE: fantasyiq
   ECS_TASK_DEFINITION_FAMILY: fantasyiq
   CONTAINER_NAME: app
+  # Fixed by infra/frontend.tf (project name + account id), so it survives a
+  # destroy/apply cycle like the role ARN below.
+  FRONTEND_BUCKET: fantasyiq-frontend-018326344181
   # Deterministic (a fixed IAM role name, not a generated id), so this
   # stays correct across a `terraform destroy` + `apply` cycle without
   # needing to be updated here -- see infra/github-oidc.tf's own comment
@@ -98,3 +105,60 @@ jobs:
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+
+  # Builds the frontend and publishes it. Independent of the backend job, so a
+  # change to either can land and deploy without waiting on the other.
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Vite names everything under assets/ with a hash of its contents, so
+      # those files never change under the same name and can be cached for a
+      # year. Everything else (index.html, the favicon) keeps its name, so
+      # browsers must ask again each time. Assets go up first: a visitor who
+      # gets the new index.html always finds the files it points to.
+      # Nothing is deleted, so a tab still open on the previous version can
+      # keep loading its own files.
+      - name: Upload the build
+        run: |
+          aws s3 sync frontend/dist "s3://$FRONTEND_BUCKET" \
+            --exclude "*" --include "assets/*" \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 sync frontend/dist "s3://$FRONTEND_BUCKET" \
+            --exclude "assets/*" \
+            --cache-control "no-cache"
+
+      # The distribution's id changes whenever the stack is recreated, so it
+      # is looked up by the comment infra/frontend.tf gives it.
+      - name: Clear the CloudFront cache
+        run: |
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='fantasyiq frontend'].Id | [0]" \
+            --output text)
+          if [ -z "$DISTRIBUTION_ID" ] || [ "$DISTRIBUTION_ID" = "None" ]; then
+            echo "No CloudFront distribution named 'fantasyiq frontend' was found." >&2
+            exit 1
+          fi
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/*"
