@@ -86,6 +86,22 @@ class IngestionRunServiceTest {
     }
 
     @Test
+    void aFailedRunLogsTheUnderlyingCauseNotJustTheWrapperMessage() {
+        RuntimeException wrapped = new RuntimeException("ESPN teams endpoint unavailable",
+                new IllegalStateException("HTTP 403 Forbidden from site.api.espn.com"));
+
+        List<ILoggingEvent> events = captureRunLogs(() ->
+                assertThatThrownBy(() -> ingestionRunService.track("TEST_SOURCE", Integer::intValue, () -> {
+                    throw wrapped;
+                })).isSameAs(wrapped));
+
+        ILoggingEvent failure = events.stream().filter(e -> e.getLevel() == Level.ERROR).findFirst().orElseThrow();
+        assertThat(failure.getFormattedMessage()).contains("rootCause=java.lang.IllegalStateException: HTTP 403 Forbidden");
+        assertThat(failure.getThrowableProxy()).isNotNull();
+        assertThat(failure.getThrowableProxy().getCause().getMessage()).contains("HTTP 403 Forbidden");
+    }
+
+    @Test
     void recordsATimerTaggedFailureWhenTheJobThrows() {
         RuntimeException failure = new RuntimeException("boom");
 
