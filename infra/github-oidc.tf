@@ -95,6 +95,35 @@ data "aws_iam_policy_document" "github_actions_deploy_permissions" {
     resources = [aws_ecs_service.app.id]
   }
 
+  # Publishing the frontend: upload the build to its bucket, then clear
+  # CloudFront's cache. No delete permission -- the workflow only adds files.
+  statement {
+    sid       = "ListTheFrontendBucket"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.frontend.arn]
+  }
+
+  statement {
+    sid       = "UploadTheFrontendBuild"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.frontend.arn}/*"]
+  }
+
+  statement {
+    sid       = "ClearTheFrontendCache"
+    actions   = ["cloudfront:CreateInvalidation"]
+    resources = [aws_cloudfront_distribution.frontend.arn]
+  }
+
+  # The workflow finds the distribution by its comment, since its id changes
+  # whenever the stack is recreated. ListDistributions doesn't support
+  # resource-level scoping.
+  statement {
+    sid       = "FindTheFrontendDistribution"
+    actions   = ["cloudfront:ListDistributions"]
+    resources = ["*"]
+  }
+
   # Registering a task definition that references the execution role
   # requires explicit permission to hand that role to ECS -- without this,
   # RegisterTaskDefinition fails even though the role itself is unchanged.

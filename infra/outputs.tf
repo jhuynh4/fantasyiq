@@ -66,3 +66,13 @@ output "dashboard_url" {
   description = "Direct link to the CloudWatch dashboard."
   value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.main.dashboard_name}"
 }
+
+output "frontend_url" {
+  description = "The app, served over HTTPS by CloudFront. The API is reachable at the same address under /api."
+  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}
+
+output "frontend_bucket" {
+  description = "Where the deploy workflow uploads the build."
+  value       = aws_s3_bucket.frontend.bucket
+}
