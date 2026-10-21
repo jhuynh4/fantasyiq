@@ -61,6 +61,9 @@ fantasyiq:
   http-client:
     connect-timeout: 5s
     read-timeout: 10s
+    # Sent on every vendor call. Must not be left to the HTTP client's default: ESPN's edge
+    # answers the JDK's "Java/21.x" with 403 Access Denied from cloud addresses.
+    user-agent: FantasyIQ/1.0
   rate-limit:
     auth:
       capacity: 10
