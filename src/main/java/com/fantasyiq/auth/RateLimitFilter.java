@@ -30,6 +30,9 @@ import java.util.concurrent.ConcurrentMap;
  * Redis round-trip per request) for no benefit yet. Revisit if this ever
  * runs behind a load balancer with multiple instances.
  *
+ * "Client" means the address the request really came from, not the proxy in front of
+ * the app: see ClientAddress and forwardedHops.
+ *
  * capacity/periodSeconds come from RateLimitProperties -- application-test.yml
  * sets a much higher capacity than application.yml's real value so the IT
  * suite's own incidental /api/auth/** traffic (AuthControllerIT alone makes
@@ -44,12 +47,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final int capacity;
     private final Duration period;
+    private final int forwardedHops;
     private final ObjectMapper objectMapper;
     private final ConcurrentMap<String, Bucket> bucketsByClientIp = new ConcurrentHashMap<>();
 
     public RateLimitFilter(RateLimitProperties rateLimitProperties, ObjectMapper objectMapper) {
         this.capacity = rateLimitProperties.capacity();
         this.period = Duration.ofSeconds(rateLimitProperties.periodSeconds());
+        this.forwardedHops = rateLimitProperties.forwardedHops();
         this.objectMapper = objectMapper;
     }
 
@@ -61,7 +66,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        Bucket bucket = bucketsByClientIp.computeIfAbsent(request.getRemoteAddr(), ip -> newBucket());
+        Bucket bucket = bucketsByClientIp.computeIfAbsent(ClientAddress.of(request, forwardedHops), ip -> newBucket());
         if (bucket.tryConsume(1)) {
             filterChain.doFilter(request, response);
             return;
