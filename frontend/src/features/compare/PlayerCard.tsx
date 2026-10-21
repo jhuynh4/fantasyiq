@@ -46,7 +46,7 @@ export function PlayerCard({
         <PlayerPicker
           label={slot}
           onlyPosition={onlyPosition}
-          excludeId={excludeId}
+          excludeIds={excludeId ? [excludeId] : []}
           autoFocus={changing}
           onPick={(picked) => {
             setChanging(false)

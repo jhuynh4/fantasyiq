@@ -53,3 +53,26 @@ export interface PlayerSummary {
   position: string
   team: string | null
 }
+
+export interface TradePlayerValue {
+  playerId: string
+  playerName: string
+  position: string
+  /** Null when the model has no data on the player at all. */
+  score: number | null
+  replacementLevel: number | null
+  valueAboveReplacement: number | null
+  factors: Factor[]
+}
+
+export interface TradeSide {
+  players: TradePlayerValue[]
+  totalValue: number
+}
+
+/** valueDelta is side A's total minus side B's, so positive favors side A. */
+export interface TradeAnalysis {
+  sideA: TradeSide
+  sideB: TradeSide
+  valueDelta: number
+}
