@@ -55,7 +55,7 @@ Node isn't installed locally at a usable version (host has 19): run npm and Vite
 
 ## Pending: first apply of PR #29
 
-The infra/profile changes in #29 are verified locally (the real image under the `aws` profile against throwaway Postgres/Redis; `terraform validate` + `fmt -check` in a container) but **not applied to real AWS**. At the next AWS session, in order:
+**The step-by-step for the whole session (apply, deploy, every check below, destroy) is `docs/runbooks/aws-session.md`; follow that, and use the list below as the summary of what has to be proven.** The infra/profile changes in #29 are verified locally (the real image under the `aws` profile against throwaway Postgres/Redis; `terraform validate` + `fmt -check` in a container) but **not applied to real AWS**. At the next AWS session, in order:
 
 1. `terraform apply`, push an image (by hand or via the pipeline — the new registry starts empty), set the two vendor API keys (`aws secretsmanager put-secret-value`) and restart the task.
 2. **The task starts** — this proves the execution role can read the new `admin-password` secret (if it can't, ECS never starts the task).
