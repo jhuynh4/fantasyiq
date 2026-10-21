@@ -31,4 +31,5 @@ infra/.terraform/
 infra/*.tfstate
 infra/*.tfstate.*
 infra/*.tfvars
+infra/*.plan
 infra/crash.log
