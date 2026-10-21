@@ -16,7 +16,7 @@ You need, on your machine:
 
 - `terraform` (>= 1.6), the AWS CLI, `curl`, `docker` (only if you push an image by hand)
 - AWS credentials for the account (`aws sts get-caller-identity` should print account `018326344181`)
-- the two vendor API keys, if you want weather/odds to work this session (optional, see step 6). **You type them yourself, in your own shell. They never go into this repo or a chat.**
+- the two vendor API keys (OpenWeatherMap and The Odds API; see step 6). **You type them yourself, in your own shell. They never go into this repo or a chat.** The Odds API's free tier is 500 requests a month and this session spends one.
 - access to the inbox for the `alert_email` address in `infra/terraform.tfvars` (you will click a confirmation link)
 - a browser tab on the repo's Actions page
 
@@ -126,9 +126,11 @@ aws ecs describe-tasks --cluster fantasyiq --tasks <task arn> --query "tasks[0].
 | Exits during startup | Read the log: usually a bad datasource URL, Flyway, or a missing env var. |
 | `Task failed ELB health checks` right as it finishes starting | The health grace period (180s) was shorter than the boot; check the log for the real start time. |
 
-## 6. Vendor API keys (optional this session)
+## 6. Vendor API keys
 
-The two vendor secrets start with the placeholder `REPLACE_ME`, so the app starts either way. Weather and odds only matter for upcoming games, and this session's data is the 2025 season, so you can **skip this step**. If you want to check the wiring, set them, typing each key when prompted (it is not echoed and does not enter your shell history):
+Two of the six scoring factors come from outside APIs that need a key: **weather** (OpenWeatherMap) and the **Vegas implied total** (The Odds API). ESPN, which supplies everything else, needs none. The secrets start with the placeholder `REPLACE_ME`, so the app starts either way, but with the placeholder those two ingestion jobs fail and the factors are simply missing from every score.
+
+This session loads the **current** week (step 8), where both factors apply: weather forecasts only exist for games in the next ~5 days, and betting lines are only on the board for upcoming games. So set both keys, typing each when prompted (it is not echoed and does not enter your shell history):
 
 ```bash
 read -rsp "OpenWeatherMap key: " KEY; echo; aws secretsmanager put-secret-value --secret-id fantasyiq/openweather-api-key --secret-string "$KEY"; unset KEY
@@ -193,19 +195,22 @@ echo "${TOKEN:0:20}..."
 
 Getting a token through CloudFront proves the whole path: browser, CloudFront, secret header, ALB, task, RDS. The access token lasts 15 minutes; repeat the `TOKEN=` line when it expires.
 
-A fresh database is empty. Load the 2025 season, in this order (each depends on the one before):
+A fresh database is empty. Load the **current season** (2026 at the time of writing; the week the app should open on is the one `GET /api/weeks/current` reports, 7 when this was written). Substitute the real season and week below if they have moved on. Each step depends on the one before:
 
 ```bash
-post() { curl -s -m 600 -o /dev/null -w "%{http_code}\n" -X POST -H "Authorization: Bearer $TOKEN" "$URL$1"; }
+SEASON=2026
+WEEK=7
+post() { curl -s -m 600 -o /dev/null -w "%{http_code}
+" -X POST -H "Authorization: Bearer $TOKEN" "$URL$1"; }
 post "/api/players/ingest"
-post "/api/games/ingest?season=2025"
+post "/api/games/ingest?season=$SEASON"
 post "/api/injuries/ingest"
 ```
 
-Then the long one:
+Then the long one, box scores for every player, for the weeks already played:
 
 ```bash
-post "/api/player-game-stats/ingest?season=2025"
+post "/api/player-game-stats/ingest?season=$SEASON"
 ```
 
 **Expect this one to answer `504`.** It makes hundreds of ESPN calls and takes minutes, but CloudFront gives up on an origin after 60 seconds (and the load balancer's idle timeout is 60 seconds too). The job itself keeps running on the server and writes its audit row either way. **Do not run it again.** Watch it finish:
@@ -214,12 +219,16 @@ post "/api/player-game-stats/ingest?season=2025"
 aws logs tail /ecs/fantasyiq --since 30m --follow --filter-pattern "Ingestion run"
 ```
 
-Wait for `Ingestion run succeeded: source=...`, then continue:
+Wait for `Ingestion run succeeded: source=...`, then compute how each defense has fared against each position, for the weeks before the current one, and bring in the forecasts and betting lines for the current week:
 
 ```bash
-for week in $(seq 1 18); do post "/api/defense-vs-position/compute?season=2025&week=$week"; done
-post "/api/recommendations/generate?season=2025&week=10"
+for week in $(seq 1 $((WEEK - 1))); do post "/api/defense-vs-position/compute?season=$SEASON&week=$week"; done
+post "/api/weather/ingest?season=$SEASON&week=$WEEK"
+post "/api/odds/ingest"
+post "/api/recommendations/generate?season=$SEASON&week=$WEEK"
 ```
+
+Weather and odds have no scheduled job, so they are only ever loaded by hand like this (a known gap in `CURRENT_WORK.md`). Games in domes get no forecast, by design. If either returns `503`, the key is wrong or the vendor is unavailable; the log line says which.
 
 If `players/ingest` or any ESPN step fails with `503`: **ESPN's edge sometimes blocks cloud IP addresses.** The app has only ever called ESPN from a home network. If the logs show `EspnUnavailableException` with a 403 from ESPN, the deployed app cannot ingest on its own and the rest of this step is blocked. That is a real finding, not a bug in this session: write it down, skip to step 9 with whatever loaded, and decide afterwards how to get data in (a dump restored from the local database, or a proxy).
 
@@ -258,8 +267,8 @@ Expect ten `401`s and then a `429`. Then, from a **different network** (your pho
 
 In the browser, signed in as the admin (or register a normal account, which also exercises sign-up):
 
-- **Rankings** for 2025 week 10: the list loads, position tabs work, the factor bars draw.
-- **A player page** (click a row): the breakdown and the arithmetic add up.
+- **Rankings**: with no week in the address it should **open on the current week** (this is the first live proof of `/api/weeks/current`). The list loads, position tabs work, the factor bars draw.
+- **A player page** (click a row): the breakdown and the arithmetic add up. Open one for an outdoor game and check that **weather** and **Vegas implied total** both appear among the factors (and that a player in a dome has no weather row), which proves the two vendor keys work end to end.
 - **Compare**: pick two quarterbacks.
 - **Trade**: add a player to each side and analyze. Note how long it takes on the small Fargate task; locally it is about 3 seconds.
 - **Sign out and back in**, and **reload while signed in** (this exercises the refresh token through CloudFront).
