@@ -16,7 +16,9 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,6 +40,7 @@ class HttpClientTimeoutsTest {
                     RestClientAutoConfiguration.class, HttpMessageConvertersAutoConfiguration.class))
             .withUserConfiguration(EnableProperties.class, HttpClientConfig.class)
             .withPropertyValues(
+                    "fantasyiq.http-client.user-agent=FantasyIQ-Test/9.9",
                     "fantasyiq.http-client.connect-timeout=2s",
                     "fantasyiq.http-client.read-timeout=" + READ_TIMEOUT.toMillis() + "ms");
 
@@ -90,6 +93,28 @@ class HttpClientTimeoutsTest {
             // The server would have answered after 3s; giving up near the 400ms timeout
             // (with generous headroom for a slow CI machine) shows the timeout fired.
             assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
+        });
+    }
+
+    @Test
+    void everyRequestCarriesTheConfiguredUserAgentInsteadOfTheJdkDefault() {
+        wireMock.stubFor(get(urlEqualTo("/who")).willReturn(aResponse().withStatus(200).withBody("ok")));
+
+        contextRunner.run(context -> {
+            RestClient client = context.getBean(RestClient.Builder.class).build();
+
+            client.get().uri(url("/who")).retrieve().body(String.class);
+
+            wireMock.verify(getRequestedFor(urlEqualTo("/who")).withHeader("User-Agent", equalTo("FantasyIQ-Test/9.9")));
+        });
+    }
+
+    @Test
+    void aBlankUserAgentIsRejectedAtStartup() {
+        contextRunner.withPropertyValues("fantasyiq.http-client.user-agent= ").run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(context.getStartupFailure())
+                    .hasStackTraceContaining("fantasyiq.http-client.user-agent must not be blank");
         });
     }
 

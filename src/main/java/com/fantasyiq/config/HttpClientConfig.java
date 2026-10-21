@@ -5,6 +5,7 @@ import org.springframework.boot.web.client.ClientHttpRequestFactorySettings;
 import org.springframework.boot.web.client.RestClientCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.ClientHttpRequestFactory;
 
 /**
@@ -14,6 +15,9 @@ import org.springframework.http.client.ClientHttpRequestFactory;
  * return. With a timeout, a hung call becomes an ordinary failure
  * (ResourceAccessException) that the existing retry, circuit breaker and
  * fallback handling already know what to do with.
+ *
+ * Also sets the User-Agent every vendor sees (see HttpClientProperties for why
+ * the JDK's default is not good enough).
  *
  * Applied as a RestClientCustomizer so it reaches every adapter's injected
  * RestClient.Builder without touching any of them.
@@ -27,6 +31,7 @@ public class HttpClientConfig {
                 .withConnectTimeout(properties.connectTimeout())
                 .withReadTimeout(properties.readTimeout());
         ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(settings);
-        return builder -> builder.requestFactory(requestFactory);
+        return builder -> builder.requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.USER_AGENT, properties.userAgent());
     }
 }
