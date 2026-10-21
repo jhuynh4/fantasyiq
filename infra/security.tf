@@ -3,8 +3,8 @@
 # the layer directly in front of it, identified by security group rather
 # than by IP range.
 #
-#   internet --80--> [alb] --8080--> [app] --5432--> [db]
-#                                       \---6379---> [redis]
+#   CloudFront --80--> [alb] --8080--> [app] --5432--> [db]
+#                                        \---6379---> [redis]
 #
 # Rules are separate resources (aws_vpc_security_group_*_rule) rather than
 # inline blocks -- the provider's recommended style, and it avoids a
@@ -12,7 +12,7 @@
 
 resource "aws_security_group" "alb" {
   name        = "${var.project}-alb"
-  description = "Load balancer: HTTP in from the internet, traffic out to the app only"
+  description = "Load balancer: HTTP in from CloudFront only, traffic out to the app only"
   vpc_id      = aws_vpc.main.id
 
   tags = {
@@ -52,13 +52,23 @@ resource "aws_security_group" "redis" {
 
 # --- Load balancer ---------------------------------------------------------
 
-# Plain HTTP only for now. HTTPS needs a domain name and an ACM certificate,
-# which this project doesn't have yet -- worth adding before real users,
-# not needed to learn the deployment mechanics.
+# Only CloudFront's edge servers may connect. Plain HTTP between the two is
+# acceptable for now because the ALB has no certificate (that needs a domain
+# name and an ACM certificate); the leg from the browser to CloudFront is
+# HTTPS. The listener additionally requires a secret header (see alb.tf), since
+# this list covers every CloudFront distribution in the world, not just ours.
+#
+# This one rule counts as ~55 rules against the group's default limit of 60
+# (a managed prefix list counts by its size), so don't add more inbound rules
+# to this group without asking AWS for a higher limit.
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "alb_http" {
   security_group_id = aws_security_group.alb.id
-  description       = "HTTP from anywhere"
-  cidr_ipv4         = "0.0.0.0/0"
+  description       = "HTTP from CloudFront"
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
   from_port         = 80
   to_port           = 80
   ip_protocol       = "tcp"
