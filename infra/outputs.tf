@@ -71,3 +71,13 @@ output "frontend_bucket" {
   description = "Where the deploy workflow uploads the build."
   value       = aws_s3_bucket.frontend.bucket
 }
+
+output "diagnostics_bucket" {
+  description = "Where the load balancer access logs (alb/) and the rejected-connection flow logs (flow/) land. Empty unless enable_diagnostics is true."
+  value       = var.enable_diagnostics ? aws_s3_bucket.diagnostics[0].bucket : ""
+}
+
+output "diagnostics_cloudfront_stream" {
+  description = "The Kinesis stream the CloudFront real-time log is written to; read it with scripts/diagnostics/read_cloudfront_realtime.py. Empty unless enable_diagnostics is true."
+  value       = var.enable_diagnostics ? aws_kinesis_stream.cloudfront[0].name : ""
+}

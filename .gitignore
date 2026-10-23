@@ -36,3 +36,5 @@ infra/crash.log
 
 # Output of the timing soaks in docs/runbooks/aws-session.md
 infra/soak*.txt
+__pycache__/
+*.pyc

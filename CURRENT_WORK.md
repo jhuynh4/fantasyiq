@@ -98,6 +98,7 @@ Second real apply, with everything built since session 1: scoring v2.1, the trad
 - ALB `TargetResponseTime` stayed 0.01-0.06 s through every stall (the app answered in milliseconds), memory 42% and ECS CPU ~1% while a 92 s read was in flight. The ALB `RequestCount` for the minute of a 30 s stall was one short, and the next minute one over: the request reached the load balancer ~30 s late. (Caution: `RequestCount` is probably attributed at completion, so this alone cannot tell a CloudFront-to-ALB delay from an ALB-to-task delay.)
 - A static page (`/`, served from S3) never stalled in ~150 requests; the API path did (6 in ~150), including a request the app rejects instantly with a `401` and which uses neither Redis nor the database. Not the cache, not the database, not the scoring code, not the client's network.
 - A temporary ALB listener rule answering `/api/pingtest` itself (a fixed `200` `pong`, no target involved) still stalled: 1.07, 0.98 and 2.57 s in 200 requests, against 2.2, 16.2, 2.0, 1.7 and 4.0 s on the app path. So at least part of it happens at or before the load balancer.
+- The ALB's `TargetConnectionErrorCount` (connections it failed to open to the app) returned no datapoints for 12:00-15:05 while `RequestCount` over the same window had data, so the load balancer never failed to connect to the app and its 10-second target connection timeout is not the explanation. Read after the session's soaks, before the destroy.
 - Several stall lengths sit on the TCP SYN retransmit schedule (1, 3, 7, 15, 31, 63 s since the first attempt), which looks like occasional dropped connection attempts being retried.
 - **Setting CloudFront's origin `connection_timeout` to 3 s (3 attempts) did not help**: stalls of 120, 76, 36 and 16 s followed, none bounded by 9 s. Not merged; the branch was dropped.
 - **Not run:** temporarily opening the ALB security group's port 80 to 0.0.0.0/0 (the listener's secret-header rule still blocks everyone but CloudFront) to test whether the CloudFront prefix-list rule drops some CloudFront connections. This is the next experiment, with CloudFront access logs and ALB access logs (`request_processing_time` vs `target_processing_time`) turned on first so a stall can be attributed to a leg. If neither shows it, open an AWS support case with these numbers.
@@ -135,7 +136,7 @@ How to reproduce and split a stall: runbook "Appendix: finding where a slow requ
 - The model (v2): see the first bullet under "Product". The old v1 finding (composite 0.31 below its best single factor 0.54) is what led to the rebuild.
 
 **Infra:**
-- **Find the intermittent API stall** (see "AWS session 2"): turn on CloudFront and ALB access logs, then the open-port experiment; 2-4% of API requests stall for 1 s to 2 min and the cause is somewhere between CloudFront and the load balancer.
+- **Find the intermittent API stall** (see "AWS session 2"): `infra/diagnostics.tf` is ready (apply with `"-var=enable_diagnostics=true"`, then follow the runbook's diagnostics appendix, step 5); also read the ALB `TargetConnectionErrorCount` metric, which was missed in session 2 and is the cheapest test of the load balancer's own 10-second connection timeout to the app; 2-4% of API requests stall for 1 s to 2 min and the cause is somewhere between CloudFront and the load balancer.
 - **Confirm the alarm email subscription** (see "AWS session 1"): until it is confirmed, no alarm notifies anyone.
 - App-level Micrometer→CloudWatch bridge (job-failure and circuit-breaker alarms) — needs `micrometer-registry-cloudwatch2` and a new IAM *task* role.
 - Remote Terraform state (it's a local, gitignored file containing secrets; losing it orphans the resources).
@@ -149,7 +150,7 @@ How to reproduce and split a stall: runbook "Appendix: finding where a slow requ
 
 1. **Model follow-ups:** nothing with a measured payoff is left. QB accuracy was investigated and is near its ceiling (see above); the injury and weather shares need history that doesn't exist. If the model is revisited, the open idea is showing uncertainty (a QB's typical single-game range is about +-8 PPR) so the score isn't read as precise.
 2. ~~The small follow-ups (weather text, week picker)~~ done in `phase-9/ui-followups`.
-3. **The next AWS session** (start by turning on CloudFront and ALB access logging, see "AWS session 2"): only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
+3. **The next AWS session** (apply with `"-var=enable_diagnostics=true"` from the start, see the runbook's diagnostics appendix): only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
 
 Remote branches: all 32 branches from merged PRs (`phase-1` through `phase-8`) still exist on origin — cleanup is deferred, nothing deletes them automatically.
 

@@ -5,6 +5,20 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 
+  # Request-level timing (see diagnostics.tf). Off unless var.enable_diagnostics is set.
+  dynamic "access_logs" {
+    for_each = var.enable_diagnostics ? [1] : []
+
+    content {
+      bucket  = aws_s3_bucket.diagnostics[0].id
+      prefix  = "alb"
+      enabled = true
+    }
+  }
+
+  # The load balancer checks it may write to the bucket at the moment logging is switched on.
+  depends_on = [aws_s3_bucket_policy.diagnostics]
+
   tags = {
     Name = "${var.project}-alb"
   }
