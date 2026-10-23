@@ -392,7 +392,7 @@ D=${ARN#*loadbalancer/}
 aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB --metric-name TargetResponseTime --dimensions Name=LoadBalancer,Value=$D --start-time $(date -u -d '-30 min' +%FT%TZ) --end-time $(date -u +%FT%TZ) --period 60 --statistics Maximum --output table
 ```
 
-Also read `TargetConnectionErrorCount` (Sum) in the same namespace: connections the load balancer failed to open to the app. The load balancer's own log says it gives up on a connection to a target after 10 seconds, so stalls of about 10, 20 and 30 seconds with a non-zero count here would put the loss on that leg. (Session 2 did not read this metric before the stack was destroyed.)
+Also read `TargetConnectionErrorCount` (Sum) in the same namespace: connections the load balancer failed to open to the app. The load balancer's own log says it gives up on a connection to a target after 10 seconds, so stalls of about 10, 20 and 30 seconds with a non-zero count here would put the loss on that leg. (Session 2 read it afterwards: no datapoints at all while `RequestCount` had data, i.e. no failed connections, so that leg was ruled out. Always check `RequestCount` over the same window first: an empty answer is what both "no errors" and a wrong dimension look like.)
 
 For the ECS task, the same with `--namespace AWS/ECS --metric-name CPUUtilization` (or `MemoryUtilization`) and `--dimensions Name=ClusterName,Value=fantasyiq Name=ServiceName,Value=fantasyiq`.
 
