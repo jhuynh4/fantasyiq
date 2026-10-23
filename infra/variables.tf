@@ -98,3 +98,9 @@ variable "enable_diagnostics" {
   type        = bool
   default     = false
 }
+
+variable "enable_cloudfront_realtime_log" {
+  description = "With enable_diagnostics, also create the CloudFront real-time log (a Kinesis stream). Set to false on an account that is not subscribed to Kinesis, where creating the stream fails with SubscriptionRequiredException; the load balancer logs and flow logs still work."
+  type        = bool
+  default     = true
+}

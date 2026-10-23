@@ -78,6 +78,6 @@ output "diagnostics_bucket" {
 }
 
 output "diagnostics_cloudfront_stream" {
-  description = "The Kinesis stream the CloudFront real-time log is written to; read it with scripts/diagnostics/read_cloudfront_realtime.py. Empty unless enable_diagnostics is true."
-  value       = var.enable_diagnostics ? aws_kinesis_stream.cloudfront[0].name : ""
+  description = "The Kinesis stream the CloudFront real-time log is written to; read it with scripts/diagnostics/read_cloudfront_realtime.py. Empty unless enable_diagnostics and enable_cloudfront_realtime_log are true."
+  value       = local.realtime_log_count == 1 ? aws_kinesis_stream.cloudfront[0].name : ""
 }

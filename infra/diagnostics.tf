@@ -19,6 +19,9 @@
 
 locals {
   diagnostics_count = var.enable_diagnostics ? 1 : 0
+  # The real-time log needs a Kinesis stream, and an account that has not been subscribed to Kinesis
+  # cannot create one (SubscriptionRequiredException); this switch leaves just that part out.
+  realtime_log_count = var.enable_diagnostics && var.enable_cloudfront_realtime_log ? 1 : 0
 }
 
 resource "aws_s3_bucket" "diagnostics" {
@@ -141,7 +144,7 @@ resource "aws_flow_log" "rejected" {
 # --- CloudFront real-time log, to a Kinesis stream -------------------------------------------------
 
 resource "aws_kinesis_stream" "cloudfront" {
-  count = local.diagnostics_count
+  count = local.realtime_log_count
 
   name             = "${var.project}-cloudfront-realtime"
   shard_count      = 1
@@ -153,7 +156,7 @@ resource "aws_kinesis_stream" "cloudfront" {
 }
 
 data "aws_iam_policy_document" "cloudfront_realtime_trust" {
-  count = local.diagnostics_count
+  count = local.realtime_log_count
 
   statement {
     actions = ["sts:AssumeRole"]
@@ -173,14 +176,14 @@ data "aws_iam_policy_document" "cloudfront_realtime_trust" {
 }
 
 resource "aws_iam_role" "cloudfront_realtime" {
-  count = local.diagnostics_count
+  count = local.realtime_log_count
 
   name               = "${var.project}-cloudfront-realtime-logs"
   assume_role_policy = data.aws_iam_policy_document.cloudfront_realtime_trust[0].json
 }
 
 data "aws_iam_policy_document" "cloudfront_realtime_permissions" {
-  count = local.diagnostics_count
+  count = local.realtime_log_count
 
   statement {
     actions = [
@@ -194,7 +197,7 @@ data "aws_iam_policy_document" "cloudfront_realtime_permissions" {
 }
 
 resource "aws_iam_role_policy" "cloudfront_realtime" {
-  count = local.diagnostics_count
+  count = local.realtime_log_count
 
   name   = "write-to-the-stream"
   role   = aws_iam_role.cloudfront_realtime[0].id
@@ -202,7 +205,7 @@ resource "aws_iam_role_policy" "cloudfront_realtime" {
 }
 
 resource "aws_cloudfront_realtime_log_config" "api" {
-  count = local.diagnostics_count
+  count = local.realtime_log_count
 
   name          = "${var.project}-api"
   sampling_rate = 100
