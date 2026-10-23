@@ -48,7 +48,13 @@ public final class SeasonBaselineFactorCalculator {
      */
     public static Optional<FactorResult> calculate(List<PlayerGameStats> thisSeasonGames,
                                                    List<BigDecimal> lastSeasonPoints) {
-        List<BigDecimal> current = pointsOf(thisSeasonGames);
+        return calculateFromPoints(pointsOf(thisSeasonGames), lastSeasonPoints);
+    }
+
+    /** The same, for callers that already have this season's points as plain values (no entities to load). */
+    public static Optional<FactorResult> calculateFromPoints(List<BigDecimal> thisSeasonPoints,
+                                                             List<BigDecimal> lastSeasonPoints) {
+        List<BigDecimal> current = thisSeasonPoints == null ? List.of() : thisSeasonPoints;
         List<BigDecimal> last = lastSeasonPoints == null ? List.of() : lastSeasonPoints;
         if (current.isEmpty() && last.isEmpty()) {
             return Optional.empty();
@@ -70,8 +76,13 @@ public final class SeasonBaselineFactorCalculator {
      * the weight last season counts for. The basis for a recommendation's confidence.
      */
     public static int effectiveGames(List<PlayerGameStats> thisSeasonGames, List<BigDecimal> lastSeasonPoints) {
+        return effectiveGamesFromPoints(pointsOf(thisSeasonGames), lastSeasonPoints);
+    }
+
+    public static int effectiveGamesFromPoints(List<BigDecimal> thisSeasonPoints, List<BigDecimal> lastSeasonPoints) {
+        int thisGames = thisSeasonPoints == null ? 0 : thisSeasonPoints.size();
         int lastGames = lastSeasonPoints == null ? 0 : lastSeasonPoints.size();
-        return (int) Math.floor(pointsOf(thisSeasonGames).size() + priorWeight(lastGames));
+        return (int) Math.floor(thisGames + priorWeight(lastGames));
     }
 
     /** Last season's weight in games: the full amount for a full season, less for a short one, nothing if there was none. */

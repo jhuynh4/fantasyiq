@@ -19,13 +19,14 @@ import com.fantasyiq.domain.stats.BettingLine;
 import com.fantasyiq.domain.stats.BettingLineRepository;
 import com.fantasyiq.domain.stats.DefenseVsPositionStats;
 import com.fantasyiq.domain.stats.DefenseVsPositionStatsRepository;
-import com.fantasyiq.domain.stats.InjuryReport;
 import com.fantasyiq.domain.stats.InjuryReportRepository;
-import com.fantasyiq.domain.stats.PlayerGameStats;
 import com.fantasyiq.domain.stats.PlayerGameStatsRepository;
 import com.fantasyiq.domain.stats.WeatherForecast;
 import com.fantasyiq.domain.stats.WeatherForecastRepository;
 import com.fantasyiq.domain.team.Team;
+import jakarta.persistence.EntityManager;
+import org.hibernate.FlushMode;
+import org.hibernate.Session;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +75,7 @@ public class StartSitRecommendationService {
     private final RecommendationReconciliationService recommendationReconciliationService;
     private final RecommendationRepository recommendationRepository;
     private final RecommendationCacheService recommendationCacheService;
+    private final EntityManager entityManager;
 
     public StartSitRecommendationService(GameRepository gameRepository, PlayerRepository playerRepository,
                                           DefenseVsPositionStatsRepository defenseVsPositionStatsRepository,
@@ -83,7 +85,8 @@ public class StartSitRecommendationService {
                                           PlayerGameStatsRepository playerGameStatsRepository,
                                           RecommendationReconciliationService recommendationReconciliationService,
                                           RecommendationRepository recommendationRepository,
-                                          RecommendationCacheService recommendationCacheService) {
+                                          RecommendationCacheService recommendationCacheService,
+                                          EntityManager entityManager) {
         this.gameRepository = gameRepository;
         this.playerRepository = playerRepository;
         this.defenseVsPositionStatsRepository = defenseVsPositionStatsRepository;
@@ -94,6 +97,7 @@ public class StartSitRecommendationService {
         this.recommendationReconciliationService = recommendationReconciliationService;
         this.recommendationRepository = recommendationRepository;
         this.recommendationCacheService = recommendationCacheService;
+        this.entityManager = entityManager;
     }
 
     /** Every team's defense-versus-position rows before the target week, for one position. */
@@ -113,32 +117,76 @@ public class StartSitRecommendationService {
         }
     }
 
+    /**
+     * Everything a week's scoring needs that does not depend on the player, fetched once instead of once per
+     * player: this season's points before the week and last season's points, each player's latest injury
+     * status, and each defense's history.
+     */
+    private record WeekInputs(Map<String, DefenseHistory> defenseByPosition,
+                              Map<UUID, List<BigDecimal>> thisSeasonPoints,
+                              Map<UUID, List<BigDecimal>> lastSeasonPoints,
+                              Map<UUID, String> injuryStatus) {
+    }
+
+    /**
+     * Hibernate normally checks every object it is tracking for changes before each query, so a run of
+     * thousands of queries over a growing set of objects spends nearly all of its time doing that (profiled:
+     * every sample of the request thread was inside the change check, and the database accounted for ~1 of
+     * ~16 seconds). The check is switched off for this method's transaction, and flushed by hand at the two
+     * points that read back what was just written.
+     */
     @Transactional
     public int computeForWeek(int season, int week) {
-        Map<String, DefenseHistory> defenseByPosition = new HashMap<>();
-        for (String position : SUPPORTED_POSITIONS) {
-            defenseByPosition.put(position, DefenseHistory.of(
-                    defenseVsPositionStatsRepository.findBySeasonAndPositionAndWeekLessThan(season, position, week)));
+        Session session = entityManager.unwrap(Session.class);
+        FlushMode previousFlushMode = session.getHibernateFlushMode();
+        session.setHibernateFlushMode(FlushMode.COMMIT);
+        try {
+            return scoreWeek(season, week);
+        } finally {
+            session.setHibernateFlushMode(previousFlushMode);
         }
+    }
 
-        Map<UUID, List<BigDecimal>> lastSeasonByPlayer = new HashMap<>();
-        for (String position : SUPPORTED_POSITIONS) {
-            for (PlayerGameStatsRepository.PlayerPoints row
-                    : playerGameStatsRepository.findPointsBySeasonAndPosition(season - 1, position)) {
-                lastSeasonByPlayer.computeIfAbsent(row.getPlayerId(), id -> new ArrayList<>()).add(row.getPoints());
-            }
-        }
+    private int scoreWeek(int season, int week) {
+        WeekInputs inputs = loadWeekInputs(season, week);
 
         Set<UUID> scoredPlayerIds = new HashSet<>();
         for (Game game : gameRepository.findBySeasonAndWeek(season, week)) {
-            scoreTeam(game, game.getHomeTeam(), game.getAwayTeam(), season, week, defenseByPosition,
-                    lastSeasonByPlayer, scoredPlayerIds);
-            scoreTeam(game, game.getAwayTeam(), game.getHomeTeam(), season, week, defenseByPosition,
-                    lastSeasonByPlayer, scoredPlayerIds);
+            Optional<WeatherForecast> forecast = weatherForecastRepository.findByGame(game);
+            scoreTeam(game, game.getHomeTeam(), game.getAwayTeam(), forecast, season, week, inputs, scoredPlayerIds);
+            scoreTeam(game, game.getAwayTeam(), game.getHomeTeam(), forecast, season, week, inputs, scoredPlayerIds);
         }
+
+        entityManager.flush();
         removeRecommendationsNoLongerProduced(season, week, scoredPlayerIds);
+        entityManager.flush();
         recommendationCacheService.refreshStartSit(season, week);
         return scoredPlayerIds.size();
+    }
+
+    private WeekInputs loadWeekInputs(int season, int week) {
+        Map<String, DefenseHistory> defenseByPosition = new HashMap<>();
+        Map<UUID, List<BigDecimal>> thisSeasonPoints = new HashMap<>();
+        Map<UUID, List<BigDecimal>> lastSeasonPoints = new HashMap<>();
+        for (String position : SUPPORTED_POSITIONS) {
+            defenseByPosition.put(position, DefenseHistory.of(
+                    defenseVsPositionStatsRepository.findBySeasonAndPositionAndWeekLessThan(season, position, week)));
+            collect(thisSeasonPoints, playerGameStatsRepository
+                    .findPointsBySeasonAndPositionAndWeekLessThan(season, position, week));
+            collect(lastSeasonPoints, playerGameStatsRepository.findPointsBySeasonAndPosition(season - 1, position));
+        }
+
+        Map<UUID, String> injuryStatus = new HashMap<>();
+        for (InjuryReportRepository.LatestStatus latest : injuryReportRepository.findLatestStatuses()) {
+            injuryStatus.putIfAbsent(latest.getPlayerId(), latest.getStatus());
+        }
+        return new WeekInputs(defenseByPosition, thisSeasonPoints, lastSeasonPoints, injuryStatus);
+    }
+
+    private static void collect(Map<UUID, List<BigDecimal>> into, List<PlayerGameStatsRepository.PlayerPoints> rows) {
+        for (PlayerGameStatsRepository.PlayerPoints row : rows) {
+            into.computeIfAbsent(row.getPlayerId(), id -> new ArrayList<>()).add(row.getPoints());
+        }
     }
 
     /**
@@ -154,24 +202,24 @@ public class StartSitRecommendationService {
         recommendationRepository.deleteAll(stale);
     }
 
-    private void scoreTeam(Game game, Team offenseTeam, Team defenseTeam, int season, int week,
-                           Map<String, DefenseHistory> defenseByPosition,
-                           Map<UUID, List<BigDecimal>> lastSeasonByPlayer, Set<UUID> scoredPlayerIds) {
+    private void scoreTeam(Game game, Team offenseTeam, Team defenseTeam, Optional<WeatherForecast> forecast,
+                           int season, int week, WeekInputs inputs, Set<UUID> scoredPlayerIds) {
+        Optional<BettingLine> line = bettingLineRepository.findByGameAndTeam(game, offenseTeam);
         for (Player player : playerRepository.findByCurrentTeamAndPositionIn(offenseTeam, SUPPORTED_POSITIONS)) {
-            List<PlayerGameStats> priorGames = playerGameStatsRepository
-                    .findByPlayerAndGame_SeasonAndGame_WeekLessThanOrderByGame_WeekDesc(player, season, week);
-            List<BigDecimal> lastSeasonPoints = lastSeasonByPlayer.getOrDefault(player.getId(), List.of());
-            Optional<FactorResult> baseline = SeasonBaselineFactorCalculator.calculate(priorGames, lastSeasonPoints);
+            List<BigDecimal> thisSeasonPoints = inputs.thisSeasonPoints().getOrDefault(player.getId(), List.of());
+            List<BigDecimal> lastSeasonPoints = inputs.lastSeasonPoints().getOrDefault(player.getId(), List.of());
+            Optional<FactorResult> baseline =
+                    SeasonBaselineFactorCalculator.calculateFromPoints(thisSeasonPoints, lastSeasonPoints);
             if (baseline.isEmpty()) {
                 continue;
             }
 
-            List<FactorResult> factors = gatherFactors(baseline.get(), game, offenseTeam, defenseTeam, player,
-                    defenseByPosition.get(player.getPosition()));
+            List<FactorResult> factors = gatherFactors(baseline.get(), line, forecast, defenseTeam, player,
+                    inputs.defenseByPosition().get(player.getPosition()), inputs.injuryStatus().get(player.getId()));
 
             BigDecimal score = factors.stream().map(FactorResult::contribution).reduce(BigDecimal.ZERO, BigDecimal::add);
             String confidence = determineConfidence(factors,
-                    SeasonBaselineFactorCalculator.effectiveGames(priorGames, lastSeasonPoints));
+                    SeasonBaselineFactorCalculator.effectiveGamesFromPoints(thisSeasonPoints, lastSeasonPoints));
 
             Recommendation recommendation = recommendationReconciliationService.resolveOrCreate(
                     player, season, week, TYPE, score, confidence, SCORING_VERSION);
@@ -187,8 +235,9 @@ public class StartSitRecommendationService {
         }
     }
 
-    private List<FactorResult> gatherFactors(FactorResult baselineFactor, Game game, Team offenseTeam,
-                                              Team defenseTeam, Player player, DefenseHistory defenseHistory) {
+    private List<FactorResult> gatherFactors(FactorResult baselineFactor, Optional<BettingLine> line,
+                                              Optional<WeatherForecast> forecast, Team defenseTeam, Player player,
+                                              DefenseHistory defenseHistory, String injuryStatus) {
         List<FactorResult> factors = new ArrayList<>();
         factors.add(baselineFactor);
         BigDecimal baseline = baselineFactor.contribution();
@@ -197,16 +246,12 @@ public class StartSitRecommendationService {
         MatchupFactorCalculator.calculate(defenseHistory.forTeam(defenseTeam), defenseHistory.league(), baseline, position)
                 .ifPresent(factors::add);
 
-        Optional<BettingLine> line = bettingLineRepository.findByGameAndTeam(game, offenseTeam);
         VegasImpliedTotalFactorCalculator.calculate(line.map(BettingLine::getImpliedTeamTotal).orElse(null), baseline)
                 .ifPresent(factors::add);
 
-        Optional<WeatherForecast> forecast = weatherForecastRepository.findByGame(game);
         WeatherFactorCalculator.calculate(forecast.orElse(null), position, baseline).ifPresent(factors::add);
 
-        Optional<InjuryReport> injury = injuryReportRepository.findTopByPlayerOrderByReportDateDesc(player);
-        InjuryFactorCalculator.calculate(injury.map(InjuryReport::getStatus).orElse(null), baseline)
-                .ifPresent(factors::add);
+        InjuryFactorCalculator.calculate(injuryStatus, baseline).ifPresent(factors::add);
 
         return factors;
     }
