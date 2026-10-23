@@ -36,28 +36,25 @@ const analysis: TradeAnalysis = {
         score: 17.48,
         replacementLevel: 13.57,
         valueAboveReplacement: 3.91,
-        factors: [
-          { factorType: 'RECENT_PERFORMANCE', contribution: 7.73, narrative: 'Scored 14.6 PPR points in their most recent game' },
-          { factorType: 'USAGE', contribution: 9.75, narrative: 'Averaging 37.5 pass attempts' },
-        ],
+        factors: [{ factorType: 'BASELINE', contribution: 17.48, narrative: 'Averaging 17.5 PPR points over 8 games this season' }],
       },
     ],
   },
   sideB: {
-    totalValue: -23.49,
+    totalValue: -3.65,
     players: [
       {
         playerId: GOFF,
         playerName: 'Jared Goff',
         position: 'QB',
-        score: -9.92,
+        score: 9.92,
         replacementLevel: 13.57,
-        valueAboveReplacement: -23.49,
-        factors: [{ factorType: 'USAGE', contribution: -18, narrative: 'Averaging 35.5 pass attempts' }],
+        valueAboveReplacement: -3.65,
+        factors: [{ factorType: 'BASELINE', contribution: 9.92, narrative: 'Averaging 9.9 PPR points over 8 games this season' }],
       },
     ],
   },
-  valueDelta: 27.4,
+  valueDelta: 7.56,
 }
 
 function renderPage(path: string) {
@@ -109,11 +106,11 @@ describe('TradePage', () => {
 
     renderPage(`/?give=${CALEB}&get=${GOFF}`)
 
-    expect(await screen.findByText('The side you give is worth 27.40 more points of value.')).toBeInTheDocument()
-    expect(screen.getByText('You get −23.49 and give 3.91, a difference of −27.40', { exact: false })).toBeInTheDocument()
+    expect(await screen.findByText('The side you give is worth 7.56 more points of value.')).toBeInTheDocument()
+    expect(screen.getByText('You get −3.65 and give 3.91, a difference of −7.56', { exact: false })).toBeInTheDocument()
     const give = screen.getByRole('region', { name: 'You give result' })
     expect(within(give).getByText('Score 17.48 · replacement level 13.57 · value +3.91')).toBeInTheDocument()
-    expect(within(give).getByText(/Recent form/)).toBeInTheDocument()
+    expect(within(give).getByText(/Season average/)).toBeInTheDocument()
     const request = fetchMock.mock.calls.find((call) => call[0] === '/api/trades/analyze')![1]!
     expect(JSON.parse(request.body as string)).toEqual({ sideAPlayerIds: [CALEB], sideBPlayerIds: [GOFF] })
   })
@@ -137,11 +134,11 @@ describe('TradePage', () => {
   it('hides the result once the players change, and asks for a fresh analysis', async () => {
     serve((url) => (url === '/api/trades/analyze' ? json(analysis) : null))
     renderPage(`/?give=${CALEB}&get=${GOFF}`)
-    await screen.findByText('The side you give is worth 27.40 more points of value.')
+    await screen.findByText('The side you give is worth 7.56 more points of value.')
 
     await userEvent.click(await screen.findByRole('button', { name: 'Remove Jared Goff' }))
 
-    expect(screen.queryByText('The side you give is worth 27.40 more points of value.')).not.toBeInTheDocument()
+    expect(screen.queryByText('The side you give is worth 7.56 more points of value.')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Analyze trade' })).toBeDisabled()
   })
 
@@ -168,20 +165,23 @@ describe('TradePage', () => {
     expect(screen.getByRole('button', { name: 'Analyze trade' })).toBeEnabled()
   })
 
-  it('explains a player who is ruled out instead of letting -1000 speak for itself', async () => {
+  it('shows an injury as an ordinary discount, with no warning about a lost season', async () => {
     const hurt: TradeAnalysis = {
       ...analysis,
       sideB: {
-        totalValue: -900,
+        totalValue: -5.15,
         players: [
           {
             playerId: GOFF,
             playerName: 'Jared Goff',
             position: 'QB',
-            score: -990,
+            score: 8.42,
             replacementLevel: 13.57,
-            valueAboveReplacement: -1003.57,
-            factors: [{ factorType: 'INJURY', contribution: -1000, narrative: 'Listed OUT' }],
+            valueAboveReplacement: -5.15,
+            factors: [
+              { factorType: 'BASELINE', contribution: 9.92, narrative: 'Averaging 9.9 PPR points over 8 games this season' },
+              { factorType: 'INJURY', contribution: -1.5, narrative: 'Listed as OUT -- assumed to miss a game or two' },
+            ],
           },
         ],
       },
@@ -190,6 +190,8 @@ describe('TradePage', () => {
 
     renderPage(`/?give=${CALEB}&get=${GOFF}`)
 
-    expect(await screen.findByRole('note')).toHaveTextContent('a short absence is valued as if it were a lost season')
+    const get = await screen.findByRole('region', { name: 'You get result' })
+    expect(within(get).getByText(/Injury status/)).toHaveTextContent('−1.50')
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 })

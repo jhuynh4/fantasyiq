@@ -2,8 +2,7 @@ package com.fantasyiq.analytics.trade;
 
 import com.fantasyiq.analytics.scoring.FactorResult;
 import com.fantasyiq.analytics.scoring.InjuryFactorCalculator;
-import com.fantasyiq.analytics.scoring.RecentPerformanceFactorCalculator;
-import com.fantasyiq.analytics.scoring.UsageTrendFactorCalculator;
+import com.fantasyiq.analytics.scoring.SeasonBaselineFactorCalculator;
 import com.fantasyiq.domain.player.Player;
 import com.fantasyiq.domain.player.PlayerNotFoundException;
 import com.fantasyiq.domain.player.PlayerRepository;
@@ -21,20 +20,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
- * Rest-of-season trade value, not tied to any single upcoming game --
- * composes only the three factor calculators that don't depend on a
- * specific future opponent (RecentPerformance, UsageTrend, Injury).
+ * Rest-of-season trade value, not tied to any single upcoming game. A
+ * player's value is what he has averaged this season (the same
+ * SeasonBaselineFactorCalculator start/sit starts from) less his injury
+ * status's expected cost over the games that remain.
  * MatchupFactorCalculator/VegasImpliedTotalFactorCalculator/WeatherFactorCalculator
  * are deliberately excluded: they answer "how good is this matchup *this
  * week*", which doesn't exist yet for a multi-week trade horizon (no
  * forecast beyond ~5 days, no odds posted that far out, no known future
  * opponent to look up defense stats for).
  *
- * Computed fresh per request, not cached/persisted like start/sit --
- * there's no natural "week" to key a cache on, and it's a much cheaper
- * computation (3 factors, no per-game loop across every game in a week).
+ * "This season" is the most recent season with any box score. A player with
+ * no games in it has no value to report, which is shown as no data rather than
+ * guessed from an older season.
+ *
+ * Computed fresh per request, not cached/persisted like start/sit -- there's
+ * no natural "week" to key a cache on. Scoring a whole position to find its
+ * replacement level takes a handful of queries (one per position, plus one
+ * for injuries), not one or two per player.
  */
 @Service
 public class TradeAnalysisService {
@@ -56,18 +62,23 @@ public class TradeAnalysisService {
         this.injuryReportRepository = injuryReportRepository;
     }
 
+    /** What every player's value in one request is measured against. */
+    private record Basis(Integer season, Map<UUID, String> injuryStatusByPlayer) {
+    }
+
     public TradeAnalysisResult analyze(List<UUID> sideAPlayerIds, List<UUID> sideBPlayerIds) {
-        Map<String, BigDecimal> replacementLevels = computeReplacementLevels();
-        TradeSideValue sideA = valueSide(sideAPlayerIds, replacementLevels);
-        TradeSideValue sideB = valueSide(sideBPlayerIds, replacementLevels);
+        Basis basis = new Basis(playerGameStatsRepository.findLatestSeason().orElse(null), latestInjuryStatuses());
+        Map<String, BigDecimal> replacementLevels = computeReplacementLevels(basis);
+        TradeSideValue sideA = valueSide(sideAPlayerIds, basis, replacementLevels);
+        TradeSideValue sideB = valueSide(sideBPlayerIds, basis, replacementLevels);
         BigDecimal valueDelta = sideA.totalValue().subtract(sideB.totalValue());
         return new TradeAnalysisResult(sideA, sideB, valueDelta);
     }
 
-    private TradeSideValue valueSide(List<UUID> playerIds, Map<String, BigDecimal> replacementLevels) {
+    private TradeSideValue valueSide(List<UUID> playerIds, Basis basis, Map<String, BigDecimal> replacementLevels) {
         List<PlayerTradeValue> values = playerIds.stream()
                 .map(this::findPlayerOrThrow)
-                .map(player -> valueForPlayer(player, replacementLevels))
+                .map(player -> valueForPlayer(player, basis, replacementLevels))
                 .toList();
         BigDecimal total = values.stream()
                 .map(v -> v.valueAboveReplacement() != null ? v.valueAboveReplacement() : BigDecimal.ZERO)
@@ -79,32 +90,36 @@ public class TradeAnalysisService {
         return playerRepository.findById(playerId).orElseThrow(() -> new PlayerNotFoundException(playerId));
     }
 
-    private PlayerTradeValue valueForPlayer(Player player, Map<String, BigDecimal> replacementLevels) {
-        List<FactorResult> factors = gatherFactors(player);
+    private PlayerTradeValue valueForPlayer(Player player, Basis basis, Map<String, BigDecimal> replacementLevels) {
+        List<PlayerGameStats> seasonGames = basis.season() == null
+                ? List.of()
+                : playerGameStatsRepository.findByPlayerAndGame_Season(player, basis.season());
+        List<FactorResult> factors = factorsFor(seasonGames, basis.injuryStatusByPlayer().get(player.getId()));
+        BigDecimal replacementLevel = replacementLevels.get(player.getPosition());
+
         if (factors.isEmpty()) {
             return new PlayerTradeValue(player.getId(), player.getFullName(), player.getPosition(),
-                    null, replacementLevels.get(player.getPosition()), null, factors);
+                    null, replacementLevel, null, factors);
         }
 
         BigDecimal score = sumContributions(factors);
-        BigDecimal replacementLevel = replacementLevels.get(player.getPosition());
         BigDecimal valueAboveReplacement = replacementLevel != null ? score.subtract(replacementLevel) : null;
 
         return new PlayerTradeValue(player.getId(), player.getFullName(), player.getPosition(),
                 score, replacementLevel, valueAboveReplacement, factors);
     }
 
-    private List<FactorResult> gatherFactors(Player player) {
+    /** Empty when the player has no games this season: there is nothing to value. */
+    private List<FactorResult> factorsFor(List<PlayerGameStats> seasonGames, String injuryStatus) {
+        Optional<FactorResult> baseline = SeasonBaselineFactorCalculator.calculate(seasonGames);
+        if (baseline.isEmpty()) {
+            return List.of();
+        }
+
         List<FactorResult> factors = new ArrayList<>();
-
-        List<PlayerGameStats> recentGames =
-                playerGameStatsRepository.findTop4ByPlayerOrderByGame_SeasonDescGame_WeekDesc(player);
-        RecentPerformanceFactorCalculator.calculate(recentGames).ifPresent(factors::add);
-        UsageTrendFactorCalculator.calculate(recentGames, player.getPosition()).ifPresent(factors::add);
-
-        Optional<InjuryReport> injury = injuryReportRepository.findTopByPlayerOrderByReportDateDesc(player);
-        InjuryFactorCalculator.calculate(injury.map(InjuryReport::getStatus).orElse(null)).ifPresent(factors::add);
-
+        factors.add(baseline.get());
+        InjuryFactorCalculator.calculateForRestOfSeason(injuryStatus, baseline.get().contribution())
+                .ifPresent(factors::add);
         return factors;
     }
 
@@ -112,15 +127,31 @@ public class TradeAnalysisService {
         return factors.stream().map(FactorResult::contribution).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private Map<String, BigDecimal> computeReplacementLevels() {
+    private Map<UUID, String> latestInjuryStatuses() {
+        Map<UUID, String> statuses = new HashMap<>();
+        for (InjuryReport report : injuryReportRepository.findLatestPerPlayer()) {
+            statuses.putIfAbsent(report.getPlayer().getId(), report.getStatus());
+        }
+        return statuses;
+    }
+
+    private Map<String, BigDecimal> computeReplacementLevels(Basis basis) {
         Map<String, BigDecimal> result = new HashMap<>();
+        if (basis.season() == null) {
+            return result;
+        }
+
         for (Map.Entry<String, Integer> entry : REPLACEMENT_RANK_BY_POSITION.entrySet()) {
             String position = entry.getKey();
             int replacementRank = entry.getValue();
 
-            List<BigDecimal> scoresDescending = playerRepository.findByPosition(position).stream()
-                    .map(this::gatherFactors)
-                    .filter(f -> !f.isEmpty())
+            Map<UUID, List<PlayerGameStats>> gamesByPlayer = playerGameStatsRepository
+                    .findBySeasonAndPosition(basis.season(), position).stream()
+                    .collect(Collectors.groupingBy(stats -> stats.getPlayer().getId()));
+
+            List<BigDecimal> scoresDescending = gamesByPlayer.entrySet().stream()
+                    .map(games -> factorsFor(games.getValue(), basis.injuryStatusByPlayer().get(games.getKey())))
+                    .filter(factors -> !factors.isEmpty())
                     .map(this::sumContributions)
                     .sorted(Comparator.reverseOrder())
                     .toList();

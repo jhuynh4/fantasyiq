@@ -1,22 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { TradeAnalysis, TradePlayerValue } from '../../api/types.ts'
-import { MAX_PER_SIDE, formatValue, outcomeOf, parseIds, ruledOutPlayers, sameSelection } from './trade.ts'
+import { MAX_PER_SIDE, formatValue, outcomeOf, parseIds, sameSelection } from './trade.ts'
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
-
-function player(overrides: Partial<TradePlayerValue>): TradePlayerValue {
-  return {
-    playerId: A,
-    playerName: 'Someone',
-    position: 'QB',
-    score: 10,
-    replacementLevel: 5,
-    valueAboveReplacement: 5,
-    factors: [],
-    ...overrides,
-  }
-}
 
 function analysis(valueDelta: number, a: TradePlayerValue[] = [], b: TradePlayerValue[] = []): TradeAnalysis {
   return { sideA: { players: a, totalValue: 0 }, sideB: { players: b, totalValue: 0 }, valueDelta }
@@ -60,14 +47,5 @@ describe('formatValue', () => {
     expect(formatValue(3.91)).toBe('+3.91')
     expect(formatValue(-23.49)).toBe('−23.49')
     expect(formatValue(0.001)).toBe('0.00')
-  })
-})
-
-describe('ruledOutPlayers', () => {
-  it('finds players carrying the injury override on either side', () => {
-    const hurt = player({ playerName: 'Hurt', factors: [{ factorType: 'INJURY', contribution: -1000, narrative: '' }] })
-    const fine = player({ playerName: 'Fine' })
-
-    expect(ruledOutPlayers(analysis(0, [fine], [hurt])).map((p) => p.playerName)).toEqual(['Hurt'])
   })
 })

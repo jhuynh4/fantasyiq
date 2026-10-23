@@ -9,64 +9,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class InjuryFactorCalculatorTest {
 
-    @Test
-    void outStatusProducesAnOverridingPenalty() {
-        Optional<FactorResult> result = InjuryFactorCalculator.calculate("OUT");
+    private static final BigDecimal BASELINE = new BigDecimal("20.00");
 
-        assertThat(result).isPresent();
-        assertThat(result.get().contribution()).isEqualByComparingTo("-1000");
+    @Test
+    void outAndIrAreTheOverridingPenaltyForThisWeek() {
+        assertThat(InjuryFactorCalculator.calculate("OUT", BASELINE).orElseThrow().contribution()).isEqualByComparingTo("-1000");
+        assertThat(InjuryFactorCalculator.calculate("ir", BASELINE).orElseThrow().contribution()).isEqualByComparingTo("-1000");
     }
 
     @Test
-    void irStatusProducesAnOverridingPenalty() {
-        Optional<FactorResult> result = InjuryFactorCalculator.calculate("IR");
-
-        assertThat(result).isPresent();
-        assertThat(result.get().contribution()).isEqualByComparingTo("-1000");
-    }
-
-    @Test
-    void doubtfulStatusProducesAModeratePenalty() {
-        Optional<FactorResult> result = InjuryFactorCalculator.calculate("Doubtful");
-
-        assertThat(result).isPresent();
-        assertThat(result.get().contribution()).isEqualByComparingTo("-40");
-    }
-
-    @Test
-    void questionableStatusProducesASmallPenalty() {
-        Optional<FactorResult> result = InjuryFactorCalculator.calculate("questionable");
-
-        assertThat(result).isPresent();
-        assertThat(result.get().contribution()).isEqualByComparingTo("-10");
-    }
-
-    @Test
-    void healthyOrUnrecognizedStatusYieldsEmptyOptional() {
-        assertThat(InjuryFactorCalculator.calculate(null)).isEmpty();
-        assertThat(InjuryFactorCalculator.calculate("ACTIVE")).isEmpty();
-        assertThat(InjuryFactorCalculator.calculate("PROBABLE")).isEmpty();
-    }
-
-    @Test
-    void withABaselineOutAndIrAreStillTheOverridingPenalty() {
-        BigDecimal baseline = new BigDecimal("20.00");
-
-        assertThat(InjuryFactorCalculator.calculate("OUT", baseline).orElseThrow().contribution()).isEqualByComparingTo("-1000");
-        assertThat(InjuryFactorCalculator.calculate("ir", baseline).orElseThrow().contribution()).isEqualByComparingTo("-1000");
-    }
-
-    @Test
-    void withABaselineDoubtfulRemovesMostOfIt() {
-        Optional<FactorResult> result = InjuryFactorCalculator.calculate("Doubtful", new BigDecimal("20.00"));
+    void doubtfulRemovesMostOfTheBaseline() {
+        Optional<FactorResult> result = InjuryFactorCalculator.calculate("Doubtful", BASELINE);
 
         // 75% of 20.00
         assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("-15.00");
     }
 
     @Test
-    void withABaselineQuestionableRemovesASmallShareOfIt() {
-        Optional<FactorResult> result = InjuryFactorCalculator.calculate("QUESTIONABLE", new BigDecimal("20.00"));
+    void questionableRemovesASmallShareOfTheBaseline() {
+        Optional<FactorResult> result = InjuryFactorCalculator.calculate("QUESTIONABLE", BASELINE);
 
         // 15% of 20.00
         assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("-3.00");
@@ -82,26 +43,77 @@ class InjuryFactorCalculatorTest {
     }
 
     @Test
-    void withABaselineAPlayerWithoutPositivePointsLosesNothingToAPartialDesignation() {
+    void aPlayerWithoutPositivePointsLosesNothingToAPartialDesignation() {
         Optional<FactorResult> result = InjuryFactorCalculator.calculate("Doubtful", new BigDecimal("-1.00"));
 
         assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("0.00");
     }
 
     @Test
-    void withABaselineHealthyOrUnrecognizedStatusYieldsEmptyOptional() {
-        BigDecimal baseline = new BigDecimal("20.00");
-
-        assertThat(InjuryFactorCalculator.calculate(null, baseline)).isEmpty();
-        assertThat(InjuryFactorCalculator.calculate("ACTIVE", baseline)).isEmpty();
-        assertThat(InjuryFactorCalculator.calculate("PROBABLE", baseline)).isEmpty();
+    void healthyOrUnrecognizedStatusYieldsEmptyOptional() {
+        assertThat(InjuryFactorCalculator.calculate(null, BASELINE)).isEmpty();
+        assertThat(InjuryFactorCalculator.calculate("ACTIVE", BASELINE)).isEmpty();
+        assertThat(InjuryFactorCalculator.calculate("PROBABLE", BASELINE)).isEmpty();
     }
 
     @Test
-    void anOverridingPenaltyAlwaysDominatesTheOtherFactorsMaxMagnitude() {
-        // Other calculators cap around a magnitude of ~25 -- the OUT penalty
-        // must comfortably exceed anything they could possibly sum to.
-        BigDecimal outPenalty = InjuryFactorCalculator.calculate("OUT").orElseThrow().contribution();
+    void anOverridingPenaltyAlwaysDominatesAnyOtherFactorsPossibleSwing() {
+        BigDecimal outPenalty = InjuryFactorCalculator.calculate("OUT", BASELINE).orElseThrow().contribution();
+
         assertThat(outPenalty).isLessThan(BigDecimal.valueOf(-100));
+    }
+
+    @Test
+    void overTheRestOfTheSeasonIrCostsAboutHalfTheValue() {
+        Optional<FactorResult> result = InjuryFactorCalculator.calculateForRestOfSeason("IR", BASELINE);
+
+        assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("-10.00");
+        assertThat(result.get().narrative()).contains("IR");
+    }
+
+    @Test
+    void overTheRestOfTheSeasonOutIsAShortAbsenceNotALostSeason() {
+        Optional<FactorResult> result = InjuryFactorCalculator.calculateForRestOfSeason("OUT", BASELINE);
+
+        // 15% of 20.00 -- a flat -1000 would have valued this as a lost season.
+        assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("-3.00");
+    }
+
+    @Test
+    void overTheRestOfTheSeasonDoubtfulAndQuestionableCostLess() {
+        assertThat(InjuryFactorCalculator.calculateForRestOfSeason("Doubtful", BASELINE).orElseThrow().contribution())
+                .isEqualByComparingTo("-2.00");
+        assertThat(InjuryFactorCalculator.calculateForRestOfSeason("questionable", BASELINE).orElseThrow().contribution())
+                .isEqualByComparingTo("-0.60");
+    }
+
+    @Test
+    void overTheRestOfTheSeasonAHealthyOrUnknownStatusYieldsEmptyOptional() {
+        assertThat(InjuryFactorCalculator.calculateForRestOfSeason(null, BASELINE)).isEmpty();
+        assertThat(InjuryFactorCalculator.calculateForRestOfSeason("ACTIVE", BASELINE)).isEmpty();
+    }
+
+    @Test
+    void overTheRestOfTheSeasonEvenIrLeavesTheBaselineWithPositiveValue() {
+        // Even the heaviest designation only removes a share of the baseline.
+        BigDecimal ir = InjuryFactorCalculator.calculateForRestOfSeason("IR", BASELINE).orElseThrow().contribution();
+
+        assertThat(BASELINE.add(ir)).isPositive();
+    }
+
+    @Test
+    void espnsInjuredReserveWordingIsTreatedAsIr() {
+        assertThat(InjuryFactorCalculator.calculate("INJURED RESERVE", BASELINE).orElseThrow().contribution())
+                .isEqualByComparingTo("-1000");
+        assertThat(InjuryFactorCalculator.calculateForRestOfSeason("Injured Reserve", BASELINE).orElseThrow().contribution())
+                .isEqualByComparingTo("-10.00");
+    }
+
+    @Test
+    void aSuspendedPlayerIsOutThisWeekAndMissesAGameOrTwoOverTheSeason() {
+        assertThat(InjuryFactorCalculator.calculate("SUSPENSION", BASELINE).orElseThrow().contribution())
+                .isEqualByComparingTo("-1000");
+        assertThat(InjuryFactorCalculator.calculateForRestOfSeason("SUSPENSION", BASELINE).orElseThrow().contribution())
+                .isEqualByComparingTo("-3.00");
     }
 }

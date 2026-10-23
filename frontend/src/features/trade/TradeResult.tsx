@@ -1,7 +1,6 @@
-import { Info } from 'lucide-react'
 import type { TradeAnalysis, TradePlayerValue, TradeSide } from '../../api/types.ts'
-import { formatValue, formatPlain, outcomeOf, ruledOutPlayers } from './trade.ts'
-import { isInjuryOverride, labelFor, sortFactors } from '../rankings/factors.ts'
+import { formatValue, formatPlain, outcomeOf } from './trade.ts'
+import { labelFor, sortFactors } from '../rankings/factors.ts'
 
 function PlayerRow({ player }: { player: TradePlayerValue }) {
   const hasData = player.score !== null && player.valueAboveReplacement !== null
@@ -32,7 +31,7 @@ function PlayerRow({ player }: { player: TradePlayerValue }) {
             <li key={factor.factorType} title={factor.narrative}>
               {labelFor(factor.factorType)}{' '}
               <span className={`mono ${factor.contribution < 0 ? 'negative' : 'positive'}`}>
-                {isInjuryOverride(factor) ? 'out' : formatValue(factor.contribution)}
+                {formatValue(factor.contribution)}
               </span>
             </li>
           ))}
@@ -60,7 +59,6 @@ function SideResult({ title, side }: { title: string; side: TradeSide }) {
 
 export function TradeResult({ analysis }: { analysis: TradeAnalysis }) {
   const outcome = outcomeOf(analysis)
-  const ruledOut = ruledOutPlayers(analysis)
 
   return (
     <div className="trade-result" aria-live="polite">
@@ -79,17 +77,6 @@ export function TradeResult({ analysis }: { analysis: TradeAnalysis }) {
         <SideResult title="You give" side={analysis.sideA} />
         <SideResult title="You get" side={analysis.sideB} />
       </div>
-
-      {ruledOut.length > 0 && (
-        <p className="notice" role="note">
-          <Info size={16} aria-hidden="true" />
-          <span>
-            {ruledOut.map((player) => player.playerName).join(', ')} {ruledOut.length > 1 ? 'are' : 'is'} listed out or on
-            injured reserve right now. The model applies that penalty over the whole rest of the season, so a short absence
-            is valued as if it were a lost season.
-          </span>
-        </p>
-      )}
     </div>
   )
 }
