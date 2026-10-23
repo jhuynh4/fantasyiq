@@ -50,8 +50,7 @@ export function RankingsPage() {
             <PeriodPickers
               season={season}
               week={week}
-              onSeasonChange={(value) => update({ season: value })}
-              onWeekChange={(value) => update({ week: value })}
+              onChange={update}
             />
           )}
         </div>

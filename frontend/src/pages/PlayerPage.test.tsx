@@ -6,6 +6,10 @@ import { session } from '../api/session.ts'
 import type { PlayerDetail, StartSitRecommendation } from '../api/types.ts'
 import { PlayerPage } from './PlayerPage.tsx'
 
+// The pickers ask the server which weeks have scores; these page tests script a fixed sequence of
+// responses, so they run without that request (PeriodPickers.test.tsx covers it).
+vi.mock('../features/rankings/usePeriods.ts', () => ({ useAvailablePeriods: () => ({ periods: null }) }))
+
 const ID = '7d7c5a73-819a-4a99-ade8-c3fd7cb9c664'
 
 function json(body: unknown, status = 200) {

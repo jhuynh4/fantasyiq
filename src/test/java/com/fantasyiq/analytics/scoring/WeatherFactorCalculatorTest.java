@@ -92,7 +92,30 @@ class WeatherFactorCalculatorTest {
 
         assertThat(result).isPresent();
         assertThat(result.get().contribution()).isEqualByComparingTo("0.00");
-        assertThat(result.get().narrative()).contains("not expected to be a factor");
+        assertThat(result.get().narrative()).isEqualTo("5 mph wind, 10% chance of precipitation -- no penalty");
+    }
+
+    @Test
+    void aPenaltyNarrativeStatesTheForecastAndWhatItCosts() {
+        Optional<FactorResult> result = WeatherFactorCalculator.calculate(forecast(72, 25, 10), "QB", BASELINE);
+
+        assertThat(result.orElseThrow().narrative()).isEqualTo("25 mph wind, 10% chance of precipitation -- costs 10% of the baseline");
+    }
+
+    @Test
+    void aRunningBackInHighWindIsToldWhyThereIsNoPenalty() {
+        Optional<FactorResult> result = WeatherFactorCalculator.calculate(forecast(72, 25, 10), "RB", BASELINE);
+
+        assertThat(result.orElseThrow().narrative())
+                .isEqualTo("25 mph wind, 10% chance of precipitation -- no penalty (wind mainly affects the passing game)");
+    }
+
+    @Test
+    void aForecastWithOnlyOneMeasurementStatesOnlyThat() {
+        WeatherForecast windOnly = new WeatherForecast(null, 70, 8, null, null);
+
+        assertThat(WeatherFactorCalculator.calculate(windOnly, "QB", BASELINE).orElseThrow().narrative())
+                .isEqualTo("8 mph wind -- no penalty");
     }
 
     @Test

@@ -80,8 +80,7 @@ export function ComparePage() {
             <PeriodPickers
               season={season}
               week={week}
-              onSeasonChange={(value) => update({ season: String(value) })}
-              onWeekChange={(value) => update({ week: String(value) })}
+              onChange={(next) => update({ season: String(next.season), week: String(next.week) })}
             />
           )}
         </div>

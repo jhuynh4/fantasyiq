@@ -3,6 +3,8 @@ package com.fantasyiq.domain.recommendation;
 import com.fantasyiq.domain.player.Player;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -21,4 +23,16 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
 
     @EntityGraph(attributePaths = {"player", "player.currentTeam", "factors"})
     List<Recommendation> findBySeasonAndType(Integer season, String type);
+
+    /** One season/week pair that has at least one recommendation of a type. */
+    interface Period {
+        Integer getSeason();
+
+        Integer getWeek();
+    }
+
+    // Which weeks have scores at all, so a client can offer only those. Season descending, weeks ascending.
+    @Query("select distinct r.season as season, r.week as week from Recommendation r where r.type = :type "
+            + "order by r.season desc, r.week asc")
+    List<Period> findPeriodsByType(@Param("type") String type);
 }
