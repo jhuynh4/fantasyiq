@@ -33,3 +33,6 @@ infra/*.tfstate.*
 infra/*.tfvars
 infra/*.plan
 infra/crash.log
+
+# Output of the timing soaks in docs/runbooks/aws-session.md
+infra/soak*.txt

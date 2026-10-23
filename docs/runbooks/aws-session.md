@@ -152,6 +152,15 @@ aws ecs update-service --cluster fantasyiq --service fantasyiq --force-new-deplo
 aws ecs wait services-stable --cluster fantasyiq --services fantasyiq
 ```
 
+**The keys must be in place before the task starts.** ECS passes secrets to the container only at startup. If the keys are stored after the task is already running, the app has empty keys, the vendors answer `401`, and weather and odds return `503` (session 2 hit this). Either store the keys before the deploy, or restart the task once afterwards:
+
+```bash
+aws ecs update-service --cluster fantasyiq --service fantasyiq --force-new-deployment > /dev/null
+aws ecs wait services-stable --cluster fantasyiq --services fantasyiq
+```
+
+In Git Bash, prefix `aws logs tail /ecs/...` with `MSYS_NO_PATHCONV=1`, or the leading `/` is rewritten into a Windows path.
+
 ## 7. Check the front door (CloudFront)
 
 Set the address once:
@@ -338,6 +347,54 @@ After this, the **Deploy workflow shows a red X on every push to `main`** until 
 | Secrets | `fantasyiq/jwt-secret`, `fantasyiq/admin-password`, `fantasyiq/openweather-api-key`, `fantasyiq/odds-api-key` |
 | Deploy role | `fantasyiq-github-deploy` |
 | Alarms | `fantasyiq-alb-5xx`, `-alb-unhealthy-hosts`, `-alb-no-healthy-hosts`, `-ecs-cpu-high`, `-rds-cpu-high` |
+
+## Appendix: finding where a slow request is slow
+
+From session 2, for an intermittent stall on `/api/*` through CloudFront. Everything below needs no token unless stated.
+
+**1. Which phase is slow.** `curl` can split a request into its phases. A slow `connect` or `tls` is the path to CloudFront; a long `firstbyte` with a fast `connect` and `tls` is CloudFront waiting on its origin:
+
+```bash
+curl -s -o /dev/null -w "dns %{time_namelookup}s  connect %{time_connect}s  tls %{time_appconnect}s  firstbyte %{time_starttransfer}s  total %{time_total}s\n" "$URL/api/players/search?q=a"
+```
+
+**2. A soak, to catch a rare stall.** One request every 2-3 seconds, printing anything over a second (a `401` is fine; it is the timing that counts, and it uses neither Redis nor the database):
+
+```bash
+for i in $(seq 1 150); do
+  for u in "/" "/api/players/search?q=a"; do
+    curl -s -o /dev/null -w "$(date +%T)  $u  %{http_code}  ttfb %{time_starttransfer}  total %{time_total}\n" "$URL$u"
+  done
+  sleep 2
+done | tee soak.txt
+awk '{ if ($NF+0 > 1) print }' soak.txt
+```
+
+`/` comes from S3 and never touches the app. If it never stalls and the API path does, the problem is on the API origin's path, not the client or CloudFront's edge.
+
+**3. Take the app out of the path.** A temporary listener rule makes the load balancer answer a path itself. Compare `/api/pingtest` with the app path in the same soak. Undo it afterwards, and note that it is a change outside Terraform:
+
+```bash
+ARN=$(aws elbv2 describe-load-balancers --names fantasyiq-alb --query "LoadBalancers[0].LoadBalancerArn" --output text)
+LISTENER=$(aws elbv2 describe-listeners --load-balancer-arn $ARN --query "Listeners[0].ListenerArn" --output text)
+RULE=$(aws elbv2 describe-rules --listener-arn $LISTENER --query "Rules[?Priority=='1'].RuleArn | [0]" --output text)
+aws elbv2 set-rule-priorities --rule-priorities RuleArn=$RULE,Priority=5
+NEWRULE=$(MSYS_NO_PATHCONV=1 aws elbv2 create-rule --listener-arn $LISTENER --priority 1 --conditions Field=path-pattern,Values=/api/pingtest --actions "Type=fixed-response,FixedResponseConfig={StatusCode=200,ContentType=text/plain,MessageBody=pong}" --query "Rules[0].RuleArn" --output text)
+# ... soak both paths ...
+aws elbv2 delete-rule --rule-arn $NEWRULE
+aws elbv2 set-rule-priorities --rule-priorities RuleArn=$RULE,Priority=1
+```
+
+**4. What the load balancer saw.** Per-minute maximum app response time and request count (the table's times are in your local zone). A stall with a tiny `TargetResponseTime` means the app was fast and the time was lost before or around it:
+
+```bash
+D=${ARN#*loadbalancer/}
+aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB --metric-name TargetResponseTime --dimensions Name=LoadBalancer,Value=$D --start-time $(date -u -d '-30 min' +%FT%TZ) --end-time $(date -u +%FT%TZ) --period 60 --statistics Maximum --output table
+```
+
+For the ECS task, the same with `--namespace AWS/ECS --metric-name CPUUtilization` (or `MemoryUtilization`) and `--dimensions Name=ClusterName,Value=fantasyiq Name=ServiceName,Value=fantasyiq`.
+
+**5. Next, not yet done:** turn on CloudFront standard logs and ALB access logs (the ALB log splits `request_processing_time`, `target_processing_time` and `response_processing_time` per request), and, as an experiment, open the ALB security group's port 80 to `0.0.0.0/0` for a soak to see whether some CloudFront connections are being dropped by the prefix-list rule (the listener's secret-header rule still protects it; close it again afterwards).
 
 ## Appendix: Windows PowerShell equivalents
 

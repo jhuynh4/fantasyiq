@@ -78,6 +78,41 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 - No SQL statements in the logs (the count command was not reported back).
 - **Alarm emails: the SNS subscription was never confirmed.** The confirmation email never arrived, and the alarm actions showed "Pending confirmation" at the end, so no alarm could have notified anyone. Check the address in `infra/terraform.tfvars`, search spam for `sns.amazonaws.com`, and confirm the subscription early next time (the runbook step 3 now says how). The state the no-healthy-hosts alarm reached was not recorded either.
 
+## AWS session 2 (2026-10-23): results
+
+Second real apply, with everything built since session 1: scoring v2.1, the trade and week-picker changes, the injury wording fix, the early-season blend. Filled in as the checks were run; blanks were not run or not reported back.
+
+**Worked:** apply, image and frontend deploy, vendor keys, sign-in through CloudFront, ingestion of the 2026 season, defense-vs-position for the played weeks, weather, odds, scoring for week 7 and the earlier weeks, rankings with the new week picker (only weeks with scores are offered).
+
+**Found:**
+- **Weather and odds returned `503` at first.** The secrets are handed to the container only when it starts, and the keys were stored after the task was already running, so the app had empty keys and the vendors answered `401`. Fix: store the keys before the deploy, or `aws ecs update-service --force-new-deployment` afterwards (runbook step 6 now says so).
+- **Access tokens last 15 minutes**, and a long session outruns them constantly; every `401` in a loop of `post` calls was this. Repeat the `TOKEN=` line.
+- **Git Bash rewrites arguments that start with `/`**, so `aws logs tail /ecs/fantasyiq` fails with an `InvalidParameterException` about the log group name. Prefix the command with `MSYS_NO_PATHCONV=1`.
+- **Scoring one week took 18.9 s warm and 45-59 s on the first runs after a restart** (ALB `TargetResponseTime`, and `Ingestion run succeeded: source=COMPUTED_START_SIT ... durationMs=22279` in the logs). The task is 0.5 vCPU with no JVM memory flags (default heap is a quarter of the container, ~256 MB); CPU sat at 100% for that minute and memory stayed flat at ~42%. The slowest run was 59.5 s, inside CloudFront's 60 s limit by half a second, so run generates one at a time and warm the app with a few ordinary requests first. The real fix is fewer queries per week (they are one-per-player), a code change.
+- **The rankings read path is fine**: 0.14-0.21 s for one position, 0.1-0.17 s with the breakdown, ~50 KB for tight ends. Reads decode the whole week's cached list (all positions) every time; caching per position would cut that.
+- **An intermittent stall on the API path through CloudFront, cause not found** (below).
+- The week picker lists only weeks that have a START_SIT row (`GET /api/recommendations/periods`); a week "disappearing" from it means no scores, not lost data.
+
+**The intermittent stall.** About 2-4% of requests to `/api/*` through CloudFront waited from 1 s to 2 minutes for the first byte (seen: 1, 2, 4, 10, 16, 31, 32, 36, 61, 76, 92, 120 s). Evidence, in the order it was gathered:
+- `curl` breakdown of a stalled request: DNS, TCP connect and TLS to CloudFront all ~0.01-0.05 s; time to first byte 30.5 s; then the whole body in 0.06 s. So the stall is after the request reaches CloudFront.
+- ALB `TargetResponseTime` stayed 0.01-0.06 s through every stall (the app answered in milliseconds), memory 42% and ECS CPU ~1% while a 92 s read was in flight. The ALB `RequestCount` for the minute of a 30 s stall was one short, and the next minute one over: the request reached the load balancer ~30 s late. (Caution: `RequestCount` is probably attributed at completion, so this alone cannot tell a CloudFront-to-ALB delay from an ALB-to-task delay.)
+- A static page (`/`, served from S3) never stalled in ~150 requests; the API path did (6 in ~150), including a request the app rejects instantly with a `401` and which uses neither Redis nor the database. Not the cache, not the database, not the scoring code, not the client's network.
+- A temporary ALB listener rule answering `/api/pingtest` itself (a fixed `200` `pong`, no target involved) still stalled: 1.07, 0.98 and 2.57 s in 200 requests, against 2.2, 16.2, 2.0, 1.7 and 4.0 s on the app path. So at least part of it happens at or before the load balancer.
+- Several stall lengths sit on the TCP SYN retransmit schedule (1, 3, 7, 15, 31, 63 s since the first attempt), which looks like occasional dropped connection attempts being retried.
+- **Setting CloudFront's origin `connection_timeout` to 3 s (3 attempts) did not help**: stalls of 120, 76, 36 and 16 s followed, none bounded by 9 s. Not merged; the branch was dropped.
+- **Not run:** temporarily opening the ALB security group's port 80 to 0.0.0.0/0 (the listener's secret-header rule still blocks everyone but CloudFront) to test whether the CloudFront prefix-list rule drops some CloudFront connections. This is the next experiment, with CloudFront access logs and ALB access logs (`request_processing_time` vs `target_processing_time`) turned on first so a stall can be attributed to a leg. If neither shows it, open an AWS support case with these numbers.
+
+How to reproduce and split a stall: runbook "Appendix: finding where a slow request is slow".
+
+**Verification list results (runbook steps 3, 8-10):**
+- Alarm email subscription confirmed: _not reported_
+- Non-admin account gets `403` on `POST /api/players/ingest`: _not reported_
+- Login rate limit (ten `401`s then `429`, and a different network still works): _not reported_
+- Player page shows Weather and Vegas factors for an outdoor game (vendor keys end to end): _not reported_
+- An injured-reserve player shows as ruled out (the `INJURED RESERVE` fix on real ESPN data): _not reported_
+- Trade timing on the small task, compare, sign-out/reload: _not reported_
+- Dashboard and alarms: _not reported_
+
 ## What remains
 
 **Product:**
@@ -100,6 +135,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 - The model (v2): see the first bullet under "Product". The old v1 finding (composite 0.31 below its best single factor 0.54) is what led to the rebuild.
 
 **Infra:**
+- **Find the intermittent API stall** (see "AWS session 2"): turn on CloudFront and ALB access logs, then the open-port experiment; 2-4% of API requests stall for 1 s to 2 min and the cause is somewhere between CloudFront and the load balancer.
 - **Confirm the alarm email subscription** (see "AWS session 1"): until it is confirmed, no alarm notifies anyone.
 - App-level Micrometer→CloudWatch bridge (job-failure and circuit-breaker alarms) — needs `micrometer-registry-cloudwatch2` and a new IAM *task* role.
 - Remote Terraform state (it's a local, gitignored file containing secrets; losing it orphans the resources).
@@ -113,7 +149,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 
 1. **Model follow-ups:** nothing with a measured payoff is left. QB accuracy was investigated and is near its ceiling (see above); the injury and weather shares need history that doesn't exist. If the model is revisited, the open idea is showing uncertainty (a QB's typical single-game range is about +-8 PPR) so the score isn't read as precise.
 2. ~~The small follow-ups (weather text, week picker)~~ done in `phase-9/ui-followups`.
-3. **The next AWS session:** only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
+3. **The next AWS session** (start by turning on CloudFront and ALB access logging, see "AWS session 2"): only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
 
 Remote branches: all 32 branches from merged PRs (`phase-1` through `phase-8`) still exist on origin — cleanup is deferred, nothing deletes them automatically.
 
