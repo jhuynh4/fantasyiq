@@ -1,6 +1,8 @@
 package com.fantasyiq.ingestion.scheduler;
 
 import com.fantasyiq.domain.game.CurrentWeekResolver;
+import com.fantasyiq.ingestion.odds.OddsApiProperties;
+import com.fantasyiq.ingestion.weather.OpenWeatherProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,7 +12,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Cron entry points for the four ingestion jobs, plus the daily start/sit
+ * Cron entry points for the ingestion jobs, plus the daily start/sit
  * scoring run that depends on them. Kept separate from the
  * *IngestionService classes themselves (see package-info.java) -- those
  * stay independently triggerable via their controllers (manual runs,
@@ -20,10 +22,11 @@ import java.util.Optional;
  * whether a run was triggered by this scheduler or a controller.
  *
  * Times are the server's zone (UTC on ECS). The scoring run is last in the
- * morning chain -- players 06:00, games 06:15, injuries 07:00, scoring 07:30 --
- * so it reads data the earlier jobs have just refreshed. Odds and weather have
- * no schedule yet, so scheduled scoring simply runs without those factors
- * unless someone ingested them by hand.
+ * morning chain -- players 06:00, games 06:15, injuries 07:00, odds 07:10,
+ * weather 07:15, scoring 07:30 -- so it reads data the earlier jobs have just
+ * refreshed. Odds and weather are skipped (with a log line, not a failed run)
+ * when their API key is not configured, since a call without one can only fail.
+ * Odds run once a day: the free tier allows 500 requests a month.
  *
  * Assumes a single app instance: with more than one, every instance would run
  * each job at the same time.
@@ -37,6 +40,10 @@ public class IngestionScheduler {
     private final GameIngestionService gameIngestionService;
     private final InjuryIngestionService injuryIngestionService;
     private final GameStatsIngestionService gameStatsIngestionService;
+    private final OddsIngestionService oddsIngestionService;
+    private final WeatherIngestionService weatherIngestionService;
+    private final OddsApiProperties oddsApiProperties;
+    private final OpenWeatherProperties openWeatherProperties;
     private final CurrentWeekResolver currentWeekResolver;
     private final StartSitRecommendationComputationService startSitRecommendationComputationService;
 
@@ -44,12 +51,20 @@ public class IngestionScheduler {
                                GameIngestionService gameIngestionService,
                                InjuryIngestionService injuryIngestionService,
                                GameStatsIngestionService gameStatsIngestionService,
+                               OddsIngestionService oddsIngestionService,
+                               WeatherIngestionService weatherIngestionService,
+                               OddsApiProperties oddsApiProperties,
+                               OpenWeatherProperties openWeatherProperties,
                                CurrentWeekResolver currentWeekResolver,
                                StartSitRecommendationComputationService startSitRecommendationComputationService) {
         this.playerIngestionService = playerIngestionService;
         this.gameIngestionService = gameIngestionService;
         this.injuryIngestionService = injuryIngestionService;
         this.gameStatsIngestionService = gameStatsIngestionService;
+        this.oddsIngestionService = oddsIngestionService;
+        this.weatherIngestionService = weatherIngestionService;
+        this.oddsApiProperties = oddsApiProperties;
+        this.openWeatherProperties = openWeatherProperties;
         this.currentWeekResolver = currentWeekResolver;
         this.startSitRecommendationComputationService = startSitRecommendationComputationService;
     }
@@ -75,6 +90,37 @@ public class IngestionScheduler {
         runSafely(() -> {
             int count = injuryIngestionService.ingestInjuries();
             log.info("Scheduled injury ingestion complete: {} reports", count);
+        });
+    }
+
+    @Scheduled(cron = "0 10 7 * * *")
+    public void scheduledOddsIngestion() {
+        if (isBlank(oddsApiProperties.apiKey())) {
+            log.info("No Odds API key configured; skipping scheduled odds ingestion");
+            return;
+        }
+        runSafely(() -> {
+            int count = oddsIngestionService.ingestOdds();
+            log.info("Scheduled odds ingestion complete: {} betting lines", count);
+        });
+    }
+
+    /** Forecasts for the current week's outdoor games (the service itself skips anything outside the forecast window). */
+    @Scheduled(cron = "0 15 7 * * *")
+    public void scheduledWeatherIngestion() {
+        if (isBlank(openWeatherProperties.apiKey())) {
+            log.info("No OpenWeatherMap key configured; skipping scheduled weather ingestion");
+            return;
+        }
+        runSafely(() -> {
+            Optional<CurrentWeekResolver.SeasonWeek> week = currentWeekResolver.resolve(Instant.now());
+            if (week.isEmpty()) {
+                log.info("No game week in range; skipping scheduled weather ingestion");
+                return;
+            }
+            int count = weatherIngestionService.ingestForecasts(week.get().season(), week.get().week());
+            log.info("Scheduled weather ingestion complete: season {} week {}, {} forecasts",
+                    week.get().season(), week.get().week(), count);
         });
     }
 
@@ -105,6 +151,10 @@ public class IngestionScheduler {
             log.info("Scheduled recommendation generation complete: season {} week {}, {} recommendations",
                     week.get().season(), week.get().week(), count);
         });
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     /**
