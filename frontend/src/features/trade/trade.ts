@@ -1,5 +1,4 @@
-import type { TradeAnalysis, TradePlayerValue } from '../../api/types.ts'
-import { isInjuryOverride } from '../rankings/factors.ts'
+import type { TradeAnalysis } from '../../api/types.ts'
 
 export const MAX_PER_SIDE = 5
 
@@ -41,8 +40,4 @@ export function formatValue(value: number): string {
 
 export function formatPlain(value: number): string {
   return `${value < 0 ? '−' : ''}${Math.abs(value).toFixed(2)}`
-}
-
-export function ruledOutPlayers(analysis: TradeAnalysis): TradePlayerValue[] {
-  return [...analysis.sideA.players, ...analysis.sideB.players].filter((player) => player.factors.some(isInjuryOverride))
 }
