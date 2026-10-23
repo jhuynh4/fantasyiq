@@ -1,6 +1,6 @@
 # Current Work
 
-## Status: backend complete through Phase 7 plus a hardening pass (PRs #27-#32); the Phase 8 frontend is built (PRs #33-#43) and was proven on real AWS in session 1 (2026-10-21)
+## Status: backend complete through Phase 7 plus a hardening pass (PRs #27-#32); the Phase 8 frontend is built (PRs #33-#43) and was proven on real AWS in session 1 (2026-10-21); **start/sit scoring was rebuilt as v2 on 2026-10-22 (branch `phase-9/scoring-v2`)**
 
 Phases 1-7 are merged to `main`, and so is all of Phase 8. After a full backend/cloud review, a hardening pass (PRs #27-#32, below) closed the gaps the review found. **Nothing is currently running in AWS**: session 1 applied the whole stack (64 resources), proved it, and destroyed it (`terraform state list` was empty afterwards). The account is on a credit-limited plan, hence the apply, verify, destroy rhythm. See "AWS session 1" for what was proven, what was found and fixed on the way, and what is still unverified.
 
@@ -81,7 +81,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 ## What remains
 
 **Product:**
-- **The model's scoring (top priority).** Looking at the first real current-week scores (2026 week 7): five of the top ten quarterbacks had a `USAGE` contribution of exactly 20.00, the cap. Four of them are backups or fill-ins (Huntley, Bagent, Winston, Daniels): a backup who steps in for an injured starter goes from almost no pass attempts to a full workload, and the factor (last 2 games against the 2 before) reads that jump as rising production. The 2025 backtest had already shown `USAGE` has almost no predictive value (suggested multiplier ~0.03), yet it can add up to 20 points, more than `RECENT_PERFORMANCE`, so the weights are the problem and not one player. Also, the model has no depth chart, so it cannot tell a one-week fill-in from a starter, and `confidence` HIGH only counts how many factors had data. Ideas, cheapest first: cut or cap `USAGE` using the tuned multiplier; measure it against the current season (now possible: reload 2026 locally and run `/tune-weights`); compare a player's volume against their season average instead of the previous two games; add a notion of who the starter is.
+- **The model's scoring: rebuilt as v2 (branch `phase-9/scoring-v2`, see `CLAUDE.md` "Scoring v2").** The 2025 backtest went from 0.306 to **0.648** (RB 0.648, TE 0.616, WR 0.593, QB 0.439), cross-checked against Postgres. A score is now the player's season-average PPR plus small percentage adjustments (matchup, Vegas, weather, injury); `USAGE` and `RECENT_PERFORMANCE` are gone from start/sit (the trade analyzer still uses them). Still open: `VEGAS`/`WEATHER` are unvalidated guesses (no historical data), QB is weak (0.44), week 1 of a season produces no rows (no baseline yet; last season's games could seed it), and the trade analyzer should move to the same season-average baseline. After deploying, regenerate the current week; old v1 rows are purged automatically on the next run for that week.
 - **The weather factor hides the forecast.** A benign forecast shows `0.00` with the text "Weather forecast is not expected to be a factor" and no numbers, which looks like the factor did not work. The narrative should say what the forecast is ("8 mph wind, 20% chance of precipitation, no penalty"). Separately, temperature is not part of the factor at all, and the thresholds (wind over 15 mph for QB/WR/TE, more than 50% chance of precipitation) were never backtested (no historical weather).
 - **The week picker offers weeks that have no scores.** Only the current week is ever generated (by hand, or by the daily 07:30 job), so switching weeks shows "No rankings have been generated". Either offer only weeks that have scores (needs the API to say which) or generate the played weeks too; note that earlier weeks use today's injury status.
 - **No START/SIT verdict** — `GET /recommendations/start-sit` returns a score and a LOW/MEDIUM/HIGH confidence (just a count of available factors, which nothing consumes), no verdict. The PRD wanted START / SIT / TOSS-UP.
@@ -97,7 +97,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 - Backtest: N+1 inside `gatherFactors` (~18 min for a full season), and `RecommendationMatcher` does one lookup per recommendation (~800 statements for a week).
 - ~~`GET /api/players/{id}` with an id that isn't a UUID returned 500~~ — fixed in #38 (400).
 - `refresh_tokens` is never cleaned up; no `EspnInjuryProvider` contract test.
-- The model: `MATCHUP` and `USAGE` show ~no signal in backtests, `VEGAS` and `WEATHER` have never been backtestable (no historical data), and the composite (0.31) is below the best single factor (0.54) — not a like-for-like comparison (different subsets of players), but a hint the weaker factors add noise. Weights are hand-picked except `RECENT_PERFORMANCE`.
+- The model (v2): see the first bullet under "Product". The old v1 finding (composite 0.31 below its best single factor 0.54) is what led to the rebuild.
 
 **Infra:**
 - **Confirm the alarm email subscription** (see "AWS session 1"): until it is confirmed, no alarm notifies anyone.
@@ -111,7 +111,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 
 ## Recommended next steps
 
-1. **Fix the model's scoring.** Start by reloading the 2026 season into the local database (the local stack can ingest it in a few minutes, since ESPN accepts your home network), then run `/tune-weights?season=2026` and look at what `USAGE` and the other factors are really worth this season. Then decide on the changes under "What remains" (cap or cut `USAGE`, volume against a season baseline, a starter notion). Re-run the backtest after each change.
+1. **Merge the scoring v2 branch** (`phase-9/scoring-v2`), then regenerate 2026 week 7 locally and look at the QB list again (the original complaint was backups ranked at the top). Then the model follow-ups above (trade analyzer on the season-average baseline; seed week 1 from last season; QB).
 2. **The small follow-ups:** put the forecast values in the weather text, and make the week picker honest about which weeks have scores.
 3. **The next AWS session:** only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
 
@@ -119,7 +119,7 @@ Remote branches: all 32 branches from merged PRs (`phase-1` through `phase-8`) s
 
 ## Working in this environment
 
-- **Local Gradle is unusable** (JVM loopback-socket issue, see `CLAUDE.md`). What works instead, with Docker Desktop running: `docker build --target build -t x .` compiles everything, then `docker run --rm x sh -c "./gradlew test --tests '*SomeTest'"` runs unit tests in Linux. **Testcontainers integration tests (`*IT`) cannot run that way** — CI is their only check, so a change touching them is only fully verified once CI is green.
+- **Local Gradle is unusable** (JVM loopback-socket issue, see `CLAUDE.md`). What works instead, with Docker Desktop running: `docker build --target build -t fq-build .` compiles everything. **The whole suite, Testcontainers ITs included, also runs locally** (found 2026-10-22): `docker run --rm -u root -v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal -e TESTCONTAINERS_RYUK_DISABLED=true fq-build sh -c 'echo "api.version=1.44" > /root/.docker-java.properties; ./gradlew test --no-daemon'` (218 tests, ~1.5 min; in Git Bash prefix with `MSYS_NO_PATHCONV=1`). Both `-u root` and the `api.version` line are needed (Docker Desktop's engine 29 rejects the old docker-java client). CI is still the required check.
 - Real-behavior checks done so far used the actual image against throwaway Postgres/Redis containers on a private Docker network. To log Hibernate SQL, set it via `SPRING_APPLICATION_JSON={"logging.level.org.hibernate.SQL":"DEBUG"}` — Spring lowercases env var names, so `LOGGING_LEVEL_ORG_HIBERNATE_SQL` silently does nothing.
 - Git: one branch per PR (`phase-N/short-description`), PRs created by hand from the compare URL (no `gh` CLI), no AI attribution anywhere. Everything goes through a PR, this file included.
 - **Windows PowerShell on this machine** parses some arguments differently from bash: `terraform plan -out=x.plan` must be quoted (`"-out=x.plan"`), and `curl` is a different command from `curl.exe`. The runbook's appendix has the PowerShell versions of everything.

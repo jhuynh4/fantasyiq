@@ -31,9 +31,10 @@ import static org.assertj.core.api.Assertions.offset;
  * Real DB fixtures, same reasoning as StartSitRecommendationServiceIT --
  * this service composes already-existing domain data plus the (already
  * separately-tested) scoring engine, no vendor to stub. Deliberately keeps
- * each fixture player down to a single factor (MATCHUP) so the predicted
- * score is fully attributable to one known input, making the resulting
- * correlation a deterministic, assertable number rather than an opaque one.
+ * each fixture player down to a single factor (BASELINE, one prior game) so
+ * the predicted score is fully attributable to one known input, making the
+ * resulting correlation a deterministic, assertable number rather than an
+ * opaque one.
  */
 class BacktestServiceIT extends IntegrationTestBase {
 
@@ -81,27 +82,23 @@ class BacktestServiceIT extends IntegrationTestBase {
         Team ari = team("ARI");
         Team sf = team("SF");
 
-        // Prior week: SF's matchup history vs WR (tough, rank 10) and RB
-        // (easy, rank 25) -- these are the only factor either fixture
-        // player will have, so each predicted score is fully attributable
-        // to this one number.
-        defenseVsPositionStatsRepository.save(new DefenseVsPositionStats(sf, SEASON, PRIOR_WEEK, "WR",
-                BigDecimal.valueOf(30), BigDecimal.valueOf(30), 10, 10));
-        defenseVsPositionStatsRepository.save(new DefenseVsPositionStats(sf, SEASON, PRIOR_WEEK, "RB",
-                BigDecimal.valueOf(15), BigDecimal.valueOf(15), 25, 25));
-
+        Game historyGame = gameRepository.save(new Game("backtest-history", SEASON, PRIOR_WEEK, ari, sf,
+                Instant.parse("2097-09-01T17:00:00Z"), "Test Stadium", "FINAL"));
         Game targetGame = gameRepository.save(new Game("backtest-target", SEASON, TARGET_WEEK, ari, sf,
                 Instant.parse("2097-09-07T17:00:00Z"), "Test Stadium", "FINAL"));
 
-        // Tougher matchup (lower contribution) paired with the lower actual
-        // total, easier matchup (higher contribution) paired with the
-        // higher actual total -- monotonically aligned, so with exactly 2
-        // points the correlation must come out to exactly +1.0.
+        // Each player's only factor is BASELINE: their single week-1 score.
+        // The lower baseline is paired with the lower actual total and the
+        // higher baseline with the higher actual total -- monotonically
+        // aligned, so with exactly 2 points the correlation must come out to
+        // exactly +1.0.
         Player wr = playerRepository.save(new Player("Backtest WR", "WR", ari, 21, "ACTIVE", LocalDate.of(1997, 1, 1)));
-        saveActualStats(wr, targetGame, ari, new BigDecimal("8.0"));
+        saveStats(wr, historyGame, ari, new BigDecimal("6.0"));
+        saveStats(wr, targetGame, ari, new BigDecimal("8.0"));
 
         Player rb = playerRepository.save(new Player("Backtest RB", "RB", ari, 22, "ACTIVE", LocalDate.of(1997, 1, 1)));
-        saveActualStats(rb, targetGame, ari, new BigDecimal("20.0"));
+        saveStats(rb, historyGame, ari, new BigDecimal("18.0"));
+        saveStats(rb, targetGame, ari, new BigDecimal("20.0"));
 
         // A third player whose *current* injury status is OUT -- their
         // recommendation is dominated by the -1000 override, but they also
@@ -110,12 +107,13 @@ class BacktestServiceIT extends IntegrationTestBase {
         // excluded from the correlation rather than blowing it up.
         Player injured = playerRepository.save(new Player("Backtest Injured WR", "WR", ari, 23, "ACTIVE", LocalDate.of(1997, 1, 1)));
         injuryReconciliationService.resolveOrCreateFromEspn(injured, "OUT", LocalDate.of(2097, 9, 5));
-        saveActualStats(injured, targetGame, ari, new BigDecimal("12.0"));
+        saveStats(injured, historyGame, ari, new BigDecimal("10.0"));
+        saveStats(injured, targetGame, ari, new BigDecimal("12.0"));
 
         BacktestResult result = backtestService.runBacktest(SEASON);
 
         assertThat(result.season()).isEqualTo(SEASON);
-        assertThat(result.weeksEvaluated()).isEqualTo(1); // only TARGET_WEEK has games
+        assertThat(result.weeksEvaluated()).isEqualTo(2); // week 1 has a game but nobody has a baseline yet
         assertThat(result.recommendationsEvaluated()).isEqualTo(3);
         assertThat(result.excludedDueToInjuryOverride()).isEqualTo(1);
         assertThat(result.matchedWithActualStats()).isEqualTo(2);
@@ -128,7 +126,7 @@ class BacktestServiceIT extends IntegrationTestBase {
         return teamRepository.findByAbbreviation(abbreviation).orElseThrow();
     }
 
-    private void saveActualStats(Player player, Game game, Team team, BigDecimal fantasyPointsPpr) {
+    private void saveStats(Player player, Game game, Team team, BigDecimal fantasyPointsPpr) {
         playerGameStatsRepository.save(new PlayerGameStats(player, game, team,
                 5, 4, 40, 0, 0, null, null, null, null, null, 0, fantasyPointsPpr, fantasyPointsPpr));
     }

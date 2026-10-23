@@ -1,15 +1,15 @@
 import { Info } from 'lucide-react'
-import { FACTOR_META } from './factors.ts'
+import { FACTOR_META, START_SIT_FACTORS } from './factors.ts'
 import { ConfidenceBadge } from './RankingsTable.tsx'
 
 export function FactorLegend() {
   return (
     <div className="table-key">
       <ul className="legend">
-        {Object.values(FACTOR_META).map((meta) => (
-          <li key={meta.label}>
-            <i className="swatch" style={{ background: meta.color }} />
-            {meta.label}
+        {START_SIT_FACTORS.map((type) => (
+          <li key={type}>
+            <i className="swatch" style={{ background: FACTOR_META[type].color }} />
+            {FACTOR_META[type].label}
           </li>
         ))}
       </ul>
@@ -30,26 +30,27 @@ export function ConfidenceGuide() {
         What does confidence mean?
       </h2>
       <p className="muted">
-        Confidence describes how much data went into a score, not the chance of a particular performance.
+        Confidence describes how many games this season the player&rsquo;s average rests on, not the chance of a
+        particular performance.
       </p>
       <dl>
         <div>
           <dt>
             <ConfidenceBadge level="HIGH" />
           </dt>
-          <dd className="muted small">Four or more of the six factors had data.</dd>
+          <dd className="muted small">Six or more games this season.</dd>
         </div>
         <div>
           <dt>
             <ConfidenceBadge level="MEDIUM" />
           </dt>
-          <dd className="muted small">Two or three factors had data.</dd>
+          <dd className="muted small">Three to five games.</dd>
         </div>
         <div>
           <dt>
             <ConfidenceBadge level="LOW" />
           </dt>
-          <dd className="muted small">One factor, or the player is listed out or on injured reserve.</dd>
+          <dd className="muted small">One or two games, or the player is listed out or on injured reserve.</dd>
         </div>
       </dl>
     </section>

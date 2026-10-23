@@ -2,12 +2,10 @@ import { isInjuryOverride } from '../rankings/factors.ts'
 import { ConfidenceBadge } from '../rankings/RankingsTable.tsx'
 import type { StartSitRecommendation } from '../../api/types.ts'
 
-const TOTAL_FACTORS = 6
-
 const CONFIDENCE_TEXT = {
-  HIGH: { title: 'Well supported', body: 'Four or more of the six factors had data for this player.' },
-  MEDIUM: { title: 'Partly supported', body: 'Two or three of the six factors had data for this player.' },
-  LOW: { title: 'Thinly supported', body: 'Only one factor had data for this player.' },
+  HIGH: { title: 'Well supported', body: 'The season average rests on six or more games.' },
+  MEDIUM: { title: 'Partly supported', body: 'The season average rests on three to five games.' },
+  LOW: { title: 'Thinly supported', body: 'The season average rests on only one or two games.' },
 } as const
 
 export function ScoreContext({
@@ -21,14 +19,14 @@ export function ScoreContext({
 }) {
   const ruledOut = recommendation.factors.some(isInjuryOverride)
   const text = CONFIDENCE_TEXT[recommendation.confidence]
-  const factorCount = recommendation.factors.length
 
   return (
     <aside className="card score-context">
       <h2>Read the score, not a verdict.</h2>
       <p className="muted">
-        {recommendation.score.toFixed(2)} is a model score built from {factorCount} of {TOTAL_FACTORS} possible factors.
-        It helps compare players within this week and position; it is not a fantasy-point total.
+        {recommendation.score.toFixed(2)} is the model&rsquo;s expected PPR points for this week: the player&rsquo;s season
+        average, adjusted for the opponent, the betting line, the weather and injury status. It is a forecast, not a
+        guarantee.
       </p>
       <div className="context-section">
         <ConfidenceBadge level={recommendation.confidence} />
