@@ -302,7 +302,7 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
         assertThat(recommendationRepository.findByPlayerAndSeasonAndWeekAndType(leftover, SEASON, TARGET_WEEK, "START_SIT"))
                 .isEmpty();
         assertThat(recommendationFor(current).getScoringVersion()).isEqualTo("v2.1");
-        assertThat(recommendationCacheService.getStartSit(SEASON, TARGET_WEEK))
+        assertThat(recommendationCacheService.getStartSit(SEASON, TARGET_WEEK, null))
                 .extracting(snapshot -> snapshot.playerName())
                 .containsExactly("Still Scored WR");
     }
@@ -340,7 +340,7 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
         // Deleting straight from the DB, bypassing refreshStartSit entirely --
         // if the cache still has a row, computeForWeek must have populated it.
         recommendationRepository.deleteAll();
-        assertThat(recommendationCacheService.getStartSit(SEASON, TARGET_WEEK)).hasSize(1);
+        assertThat(recommendationCacheService.getStartSit(SEASON, TARGET_WEEK, null)).hasSize(1);
     }
 
     private Team team(String abbreviation) {

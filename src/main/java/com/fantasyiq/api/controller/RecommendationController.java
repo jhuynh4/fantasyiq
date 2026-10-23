@@ -8,7 +8,6 @@ import com.fantasyiq.api.dto.StartSitRecommendationResponse;
 import com.fantasyiq.api.dto.WeightTuningResponse;
 import com.fantasyiq.cache.RecommendationCacheService;
 import com.fantasyiq.domain.recommendation.RecommendationRepository;
-import com.fantasyiq.domain.recommendation.RecommendationSnapshot;
 import com.fantasyiq.ingestion.scheduler.BacktestComputationService;
 import com.fantasyiq.ingestion.scheduler.StartSitRecommendationComputationService;
 import jakarta.validation.constraints.Max;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -59,11 +57,7 @@ public class RecommendationController {
     public ResponseEntity<List<StartSitRecommendationResponse>> startSit(
             @RequestParam @Min(1) int season, @RequestParam @Min(1) @Max(18) int week,
             @RequestParam(required = false) String position) {
-        List<RecommendationSnapshot> snapshots = recommendationCacheService.getStartSit(season, week);
-
-        List<StartSitRecommendationResponse> response = snapshots.stream()
-                .filter(s -> position == null || position.equals(s.position()))
-                .sorted(Comparator.comparing(RecommendationSnapshot::score).reversed())
+        List<StartSitRecommendationResponse> response = recommendationCacheService.getStartSit(season, week, position).stream()
                 .map(StartSitRecommendationResponse::from)
                 .toList();
         return ResponseEntity.ok(response);
