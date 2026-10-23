@@ -7,6 +7,10 @@ import { session } from '../api/session.ts'
 import type { StartSitRecommendation } from '../api/types.ts'
 import { RankingsPage } from './RankingsPage.tsx'
 
+// The pickers ask the server which weeks have scores; these page tests script a fixed sequence of
+// responses, so they run without that request (PeriodPickers.test.tsx covers it).
+vi.mock('../features/rankings/usePeriods.ts', () => ({ useAvailablePeriods: () => ({ periods: null }) }))
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }

@@ -82,8 +82,8 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 
 **Product:**
 - **The model's scoring: rebuilt as v2 (branch `phase-9/scoring-v2`, see `CLAUDE.md` "Scoring v2").** The 2025 backtest went from 0.306 to **0.648** (RB 0.648, TE 0.616, WR 0.593, QB 0.439), cross-checked against Postgres. A score is now the player's season-average PPR plus small percentage adjustments (matchup, Vegas, weather, injury); `USAGE` and `RECENT_PERFORMANCE` are gone from start/sit (the trade analyzer still uses them). Still open: `VEGAS`/`WEATHER` are unvalidated guesses (no historical data), QB is weak (0.44), week 1 of a season produces no rows (no baseline yet; last season's games could seed it), (the trade analyzer moved to the same baseline in `phase-9/trade-v2`). After deploying, regenerate the current week; old v1 rows are purged automatically on the next run for that week.
-- **The weather factor hides the forecast.** A benign forecast shows `0.00` with the text "Weather forecast is not expected to be a factor" and no numbers, which looks like the factor did not work. The narrative should say what the forecast is ("8 mph wind, 20% chance of precipitation, no penalty"). Separately, temperature is not part of the factor at all, and the thresholds (wind over 15 mph for QB/WR/TE, more than 50% chance of precipitation) were never backtested (no historical weather).
-- **The week picker offers weeks that have no scores.** Only the current week is ever generated (by hand, or by the daily 07:30 job), so switching weeks shows "No rankings have been generated". Either offer only weeks that have scores (needs the API to say which) or generate the played weeks too; note that earlier weeks use today's injury status.
+- **The weather factor**: the forecast values are now in the text (`8 mph wind, 20% chance of precipitation -- no penalty`), fixed in `phase-9/ui-followups`. Still open: temperature is not part of the factor, and the thresholds (wind over 15 mph for QB/WR/TE, more than 50% chance of precipitation) were never backtested (no historical weather).
+- **The week picker** now offers only weeks that have scores (`GET /api/recommendations/periods`, `useAvailablePeriods`); the week on show stays selectable and is labelled "no scores yet", and switching season moves to a scored week. If the request fails the picker falls back to all 18 weeks. Earlier weeks still use today's injury status.
 - **No START/SIT verdict** — `GET /recommendations/start-sit` returns a score and a LOW/MEDIUM/HIGH confidence (just a count of available factors, which nothing consumes), no verdict. The PRD wanted START / SIT / TOSS-UP.
 - **A full week's response is ~400 KB** (800 players, no pagination); a cache hit still takes ~0.12s for that payload. A UI should request one position at a time, or the API should gain a `limit`.
 - Waiver-wire analyzer (`analytics/waiver` is an empty placeholder); K/DST support (needs a different ESPN endpoint).
@@ -112,7 +112,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 ## Recommended next steps
 
 1. **Merge the scoring v2 branch** (`phase-9/scoring-v2`), then regenerate 2026 week 7 locally and look at the QB list again (the original complaint was backups ranked at the top). Then the model follow-ups above (trade analyzer on the season-average baseline; seed week 1 from last season; QB).
-2. **The small follow-ups:** put the forecast values in the weather text, and make the week picker honest about which weeks have scores.
+2. ~~The small follow-ups (weather text, week picker)~~ done in `phase-9/ui-followups`.
 3. **The next AWS session:** only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
 
 Remote branches: all 32 branches from merged PRs (`phase-1` through `phase-8`) still exist on origin — cleanup is deferred, nothing deletes them automatically.

@@ -10,6 +10,12 @@ export interface CurrentWeek {
   week: number
 }
 
+/** A season and the weeks of it that have start/sit scores. */
+export interface RecommendationPeriod {
+  season: number
+  weeks: number[]
+}
+
 /** The RFC 7807 body the backend returns for every error; only `detail` is shown to people. */
 export interface ApiProblem {
   status?: number
