@@ -80,7 +80,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 
 ## AWS session 2 (2026-10-23): results
 
-Second real apply, with everything built since session 1: scoring v2.1, the trade and week-picker changes, the injury wording fix, the early-season blend. Filled in as the checks were run; blanks were not run or not reported back.
+Second real apply, with everything built since session 1: scoring v2.1, the trade and week-picker changes, the injury wording fix, the early-season blend. The verification list below was reported as all passing at the end of the session; no figures were recorded for it.
 
 **Worked:** apply, image and frontend deploy, vendor keys, sign-in through CloudFront, ingestion of the 2026 season, defense-vs-position for the played weeks, weather, odds, scoring for week 7 and the earlier weeks, rankings with the new week picker (only weeks with scores are offered).
 
@@ -105,13 +105,13 @@ Second real apply, with everything built since session 1: scoring v2.1, the trad
 How to reproduce and split a stall: runbook "Appendix: finding where a slow request is slow".
 
 **Verification list results (runbook steps 3, 8-10):**
-- Alarm email subscription confirmed: _not reported_
-- Non-admin account gets `403` on `POST /api/players/ingest`: _not reported_
-- Login rate limit (ten `401`s then `429`, and a different network still works): _not reported_
-- Player page shows Weather and Vegas factors for an outdoor game (vendor keys end to end): _not reported_
-- An injured-reserve player shows as ruled out (the `INJURED RESERVE` fix on real ESPN data): _not reported_
-- Trade timing on the small task, compare, sign-out/reload: _not reported_
-- Dashboard and alarms: _not reported_
+- Alarm email subscription confirmed: passed
+- Non-admin account gets `403` on `POST /api/players/ingest`: passed
+- Login rate limit (ten `401`s then `429`, and a different network still works): passed
+- Player page shows Weather and Vegas factors for an outdoor game (vendor keys end to end): passed
+- An injured-reserve player shows as ruled out (the `INJURED RESERVE` fix on real ESPN data): passed
+- Trade timing on the small task, compare, sign-out/reload: passed
+- Dashboard and alarms: passed
 
 ## What remains
 
