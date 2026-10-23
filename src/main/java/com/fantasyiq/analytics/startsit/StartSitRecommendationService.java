@@ -44,19 +44,20 @@ import java.util.UUID;
  * START_SIT recommendation per player, for every QB/RB/WR/TE on either side
  * of every game in the target week.
  *
- * The score is an expected-points forecast (scoring version v2): the player's
- * season-average PPR (BASELINE) plus percentage adjustments for the opponent,
- * the betting market, the weather and injury status, all summed. A player with
- * no games this season has no baseline, and the adjustments mean nothing
- * without one, so that player gets no recommendation row at all rather than a
- * hollow one. The other factors are independently optional: a missing one
- * contributes nothing, and does not lower the score.
+ * The score is an expected-points forecast (scoring version v2.1): the
+ * player's average PPR (BASELINE, this season's games with last season's
+ * average counting as a few extra games) plus percentage adjustments for the
+ * opponent, the betting market, the weather and injury status, all summed. A
+ * player with no games this season or last has no baseline, and the
+ * adjustments mean nothing without one, so that player gets no recommendation
+ * row at all rather than a hollow one. The other factors are independently
+ * optional: a missing one contributes nothing, and does not lower the score.
  */
 @Service
 public class StartSitRecommendationService {
 
     static final String TYPE = "START_SIT";
-    static final String SCORING_VERSION = "v2";
+    static final String SCORING_VERSION = "v2.1";
 
     private static final List<String> SUPPORTED_POSITIONS = List.of("QB", "RB", "WR", "TE");
     private static final BigDecimal INJURY_OVERRIDE_THRESHOLD = BigDecimal.valueOf(-100);
@@ -120,10 +121,20 @@ public class StartSitRecommendationService {
                     defenseVsPositionStatsRepository.findBySeasonAndPositionAndWeekLessThan(season, position, week)));
         }
 
+        Map<UUID, List<BigDecimal>> lastSeasonByPlayer = new HashMap<>();
+        for (String position : SUPPORTED_POSITIONS) {
+            for (PlayerGameStatsRepository.PlayerPoints row
+                    : playerGameStatsRepository.findPointsBySeasonAndPosition(season - 1, position)) {
+                lastSeasonByPlayer.computeIfAbsent(row.getPlayerId(), id -> new ArrayList<>()).add(row.getPoints());
+            }
+        }
+
         Set<UUID> scoredPlayerIds = new HashSet<>();
         for (Game game : gameRepository.findBySeasonAndWeek(season, week)) {
-            scoreTeam(game, game.getHomeTeam(), game.getAwayTeam(), season, week, defenseByPosition, scoredPlayerIds);
-            scoreTeam(game, game.getAwayTeam(), game.getHomeTeam(), season, week, defenseByPosition, scoredPlayerIds);
+            scoreTeam(game, game.getHomeTeam(), game.getAwayTeam(), season, week, defenseByPosition,
+                    lastSeasonByPlayer, scoredPlayerIds);
+            scoreTeam(game, game.getAwayTeam(), game.getHomeTeam(), season, week, defenseByPosition,
+                    lastSeasonByPlayer, scoredPlayerIds);
         }
         removeRecommendationsNoLongerProduced(season, week, scoredPlayerIds);
         recommendationCacheService.refreshStartSit(season, week);
@@ -144,11 +155,13 @@ public class StartSitRecommendationService {
     }
 
     private void scoreTeam(Game game, Team offenseTeam, Team defenseTeam, int season, int week,
-                           Map<String, DefenseHistory> defenseByPosition, Set<UUID> scoredPlayerIds) {
+                           Map<String, DefenseHistory> defenseByPosition,
+                           Map<UUID, List<BigDecimal>> lastSeasonByPlayer, Set<UUID> scoredPlayerIds) {
         for (Player player : playerRepository.findByCurrentTeamAndPositionIn(offenseTeam, SUPPORTED_POSITIONS)) {
             List<PlayerGameStats> priorGames = playerGameStatsRepository
                     .findByPlayerAndGame_SeasonAndGame_WeekLessThanOrderByGame_WeekDesc(player, season, week);
-            Optional<FactorResult> baseline = SeasonBaselineFactorCalculator.calculate(priorGames);
+            List<BigDecimal> lastSeasonPoints = lastSeasonByPlayer.getOrDefault(player.getId(), List.of());
+            Optional<FactorResult> baseline = SeasonBaselineFactorCalculator.calculate(priorGames, lastSeasonPoints);
             if (baseline.isEmpty()) {
                 continue;
             }
@@ -157,7 +170,8 @@ public class StartSitRecommendationService {
                     defenseByPosition.get(player.getPosition()));
 
             BigDecimal score = factors.stream().map(FactorResult::contribution).reduce(BigDecimal.ZERO, BigDecimal::add);
-            String confidence = determineConfidence(factors, SeasonBaselineFactorCalculator.gamesCounted(priorGames));
+            String confidence = determineConfidence(factors,
+                    SeasonBaselineFactorCalculator.effectiveGames(priorGames, lastSeasonPoints));
 
             Recommendation recommendation = recommendationReconciliationService.resolveOrCreate(
                     player, season, week, TYPE, score, confidence, SCORING_VERSION);
@@ -198,8 +212,8 @@ public class StartSitRecommendationService {
     }
 
     /**
-     * How much evidence the baseline rests on: the number of games it averages.
-     * (v1 counted how many factors had data, which in v2 would say nothing
+     * How much evidence the baseline rests on, in games: this season's plus the
+     * weight last season counts for. (v1 counted how many factors had data, which in v2 would say nothing
      * about the forecast's reliability -- it would only reflect whether odds and
      * weather happened to be ingested.) A player ruled out is always LOW.
      */

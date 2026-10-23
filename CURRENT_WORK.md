@@ -81,7 +81,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 ## What remains
 
 **Product:**
-- **The model's scoring: rebuilt as v2 (branch `phase-9/scoring-v2`, see `CLAUDE.md` "Scoring v2").** The 2025 backtest went from 0.306 to **0.648** (RB 0.648, TE 0.616, WR 0.593, QB 0.439), cross-checked against Postgres. A score is now the player's season-average PPR plus small percentage adjustments (matchup, Vegas, weather, injury); `USAGE` and `RECENT_PERFORMANCE` are gone from start/sit (the trade analyzer still uses them). Still open: `VEGAS`/`WEATHER` are unvalidated guesses (no historical data), QB is weak (0.44), week 1 of a season produces no rows (no baseline yet; last season's games could seed it), (the trade analyzer moved to the same baseline in `phase-9/trade-v2`). After deploying, regenerate the current week; old v1 rows are purged automatically on the next run for that week.
+- **The model's scoring: v2.1 (see `CLAUDE.md` "Scoring v2").** 2025 backtest 0.306 (v1) -> 0.648 (v2) -> **0.667** (v2.1: last season's average counts as up to 4 extra games, so week 1 now has rankings, 0.69 correlation on 282 players); RB 0.658, TE 0.632, WR 0.626, QB 0.462. Trade values use the same blend. Still open: `VEGAS`/`WEATHER` are unvalidated guesses (no historical data), QB is the weak spot (0.46), rookies get no row in week 1 (no games anywhere), and the injury shares are judgement calls. After deploying, regenerate the current week; old rows are purged automatically on the next run for that week.
 - **The weather factor**: the forecast values are now in the text (`8 mph wind, 20% chance of precipitation -- no penalty`), fixed in `phase-9/ui-followups`. Still open: temperature is not part of the factor, and the thresholds (wind over 15 mph for QB/WR/TE, more than 50% chance of precipitation) were never backtested (no historical weather).
 - **The week picker** now offers only weeks that have scores (`GET /api/recommendations/periods`, `useAvailablePeriods`); the week on show stays selectable and is labelled "no scores yet", and switching season moves to a scored week. If the request fails the picker falls back to all 18 weeks. Earlier weeks still use today's injury status.
 - **No START/SIT verdict** — `GET /recommendations/start-sit` returns a score and a LOW/MEDIUM/HIGH confidence (just a count of available factors, which nothing consumes), no verdict. The PRD wanted START / SIT / TOSS-UP.
@@ -111,7 +111,7 @@ The whole of `docs/runbooks/aws-session.md` was followed once, from a Windows Po
 
 ## Recommended next steps
 
-1. **Merge the scoring v2 branch** (`phase-9/scoring-v2`), then regenerate 2026 week 7 locally and look at the QB list again (the original complaint was backups ranked at the top). Then the model follow-ups above (trade analyzer on the season-average baseline; seed week 1 from last season; QB).
+1. **Model follow-ups:** QB accuracy (0.46; start by looking at which quarterbacks are most wrong), and the injury and weather shares if any history ever turns up.
 2. ~~The small follow-ups (weather text, week picker)~~ done in `phase-9/ui-followups`.
 3. **The next AWS session:** only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
 
