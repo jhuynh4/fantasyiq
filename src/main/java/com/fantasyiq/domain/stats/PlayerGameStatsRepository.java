@@ -52,6 +52,15 @@ public interface PlayerGameStatsRepository extends JpaRepository<PlayerGameStats
         BigDecimal getPoints();
     }
 
+    // The same, for this season's games before a week, newest first: the order the old per-player query
+    // returned them in, so sums and averages come out bit-for-bit identical to it.
+    @Query("select s.player.id as playerId, s.fantasyPointsPpr as points from PlayerGameStats s "
+            + "where s.game.season = :season and s.game.week < :week and s.player.position = :position "
+            + "and s.fantasyPointsPpr is not null order by s.game.week desc")
+    List<PlayerPoints> findPointsBySeasonAndPositionAndWeekLessThan(@Param("season") Integer season,
+                                                                    @Param("position") String position,
+                                                                    @Param("week") Integer week);
+
     // For callers that only need each player's points over a whole season (last season's average).
     // Plain values rather than entities: loading thousands of tracked entities makes every later
     // query in the same transaction slower, because each one has to check them all for changes.
