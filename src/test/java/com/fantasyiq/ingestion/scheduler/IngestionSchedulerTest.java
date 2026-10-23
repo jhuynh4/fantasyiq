@@ -1,6 +1,8 @@
 package com.fantasyiq.ingestion.scheduler;
 
 import com.fantasyiq.domain.game.CurrentWeekResolver;
+import com.fantasyiq.ingestion.odds.OddsApiProperties;
+import com.fantasyiq.ingestion.weather.OpenWeatherProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +35,10 @@ class IngestionSchedulerTest {
     @Mock
     private GameStatsIngestionService gameStatsIngestionService;
     @Mock
+    private OddsIngestionService oddsIngestionService;
+    @Mock
+    private WeatherIngestionService weatherIngestionService;
+    @Mock
     private CurrentWeekResolver currentWeekResolver;
     @Mock
     private StartSitRecommendationComputationService computationService;
@@ -41,8 +47,62 @@ class IngestionSchedulerTest {
 
     @BeforeEach
     void setUp() {
-        scheduler = new IngestionScheduler(playerIngestionService, gameIngestionService, injuryIngestionService,
-                gameStatsIngestionService, currentWeekResolver, computationService);
+        scheduler = schedulerWithKeys("odds-key", "weather-key");
+    }
+
+    private IngestionScheduler schedulerWithKeys(String oddsKey, String weatherKey) {
+        return new IngestionScheduler(playerIngestionService, gameIngestionService, injuryIngestionService,
+                gameStatsIngestionService, oddsIngestionService, weatherIngestionService,
+                new OddsApiProperties("http://odds", oddsKey), new OpenWeatherProperties("http://weather", weatherKey),
+                currentWeekResolver, computationService);
+    }
+
+    @Test
+    void ingestsOddsWhenAKeyIsConfigured() {
+        scheduler.scheduledOddsIngestion();
+
+        verify(oddsIngestionService).ingestOdds();
+    }
+
+    @Test
+    void skipsOddsWithoutAKey() {
+        schedulerWithKeys("", "weather-key").scheduledOddsIngestion();
+        schedulerWithKeys(null, "weather-key").scheduledOddsIngestion();
+
+        verify(oddsIngestionService, never()).ingestOdds();
+    }
+
+    @Test
+    void ingestsWeatherForTheWeekTheResolverReports() {
+        when(currentWeekResolver.resolve(any()))
+                .thenReturn(Optional.of(new CurrentWeekResolver.SeasonWeek(2026, 7)));
+
+        scheduler.scheduledWeatherIngestion();
+
+        verify(weatherIngestionService).ingestForecasts(2026, 7);
+    }
+
+    @Test
+    void skipsWeatherWithoutAKeyOrOutsideTheSeason() {
+        schedulerWithKeys("odds-key", " ").scheduledWeatherIngestion();
+        verify(weatherIngestionService, never()).ingestForecasts(anyInt(), anyInt());
+
+        when(currentWeekResolver.resolve(any())).thenReturn(Optional.empty());
+        scheduler.scheduledWeatherIngestion();
+        verify(weatherIngestionService, never()).ingestForecasts(anyInt(), anyInt());
+    }
+
+    @Test
+    void aFailedOddsOrWeatherRunDoesNotEscapeTheScheduler() {
+        when(oddsIngestionService.ingestOdds()).thenThrow(new RuntimeException("boom"));
+        when(currentWeekResolver.resolve(any()))
+                .thenReturn(Optional.of(new CurrentWeekResolver.SeasonWeek(2026, 7)));
+        when(weatherIngestionService.ingestForecasts(2026, 7)).thenThrow(new RuntimeException("boom"));
+
+        assertThatCode(() -> {
+            scheduler.scheduledOddsIngestion();
+            scheduler.scheduledWeatherIngestion();
+        }).doesNotThrowAnyException();
     }
 
     @Test
