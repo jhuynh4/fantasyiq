@@ -392,9 +392,47 @@ D=${ARN#*loadbalancer/}
 aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB --metric-name TargetResponseTime --dimensions Name=LoadBalancer,Value=$D --start-time $(date -u -d '-30 min' +%FT%TZ) --end-time $(date -u +%FT%TZ) --period 60 --statistics Maximum --output table
 ```
 
+Also read `TargetConnectionErrorCount` (Sum) in the same namespace: connections the load balancer failed to open to the app. The load balancer's own log says it gives up on a connection to a target after 10 seconds, so stalls of about 10, 20 and 30 seconds with a non-zero count here would put the loss on that leg. (Session 2 did not read this metric before the stack was destroyed.)
+
 For the ECS task, the same with `--namespace AWS/ECS --metric-name CPUUtilization` (or `MemoryUtilization`) and `--dimensions Name=ClusterName,Value=fantasyiq Name=ServiceName,Value=fantasyiq`.
 
-**5. Next, not yet done:** turn on CloudFront standard logs and ALB access logs (the ALB log splits `request_processing_time`, `target_processing_time` and `response_processing_time` per request), and, as an experiment, open the ALB security group's port 80 to `0.0.0.0/0` for a soak to see whether some CloudFront connections are being dropped by the prefix-list rule (the listener's secret-header rule still protects it; close it again afterwards).
+**5. Diagnostics mode: log every leg of a request.** `infra/diagnostics.tf` (off by default) adds three logs, each measuring one leg of `viewer -> CloudFront -> load balancer -> app`. Apply with the variable set, from the start of a session if a stall is suspected:
+
+```bash
+terraform plan "-var=enable_diagnostics=true" "-out=session.plan"
+terraform apply session.plan
+```
+
+It adds a Kinesis stream (one shard) and a CloudFront real-time log on the `/api/*` behavior, load balancer access logs to a new S3 bucket, and a VPC flow log that records only rejected connection attempts. It costs a few cents an hour and is removed by the destroy (the bucket is emptied automatically). Then:
+
+1. Run the soak for 20-30 minutes. It prints every slow request with CloudFront's request id (`x-amz-cf-id`):
+
+   ```bash
+   scripts/diagnostics/soak.sh "$URL" 600 2 1
+   ```
+
+2. Read CloudFront's side, which arrives within seconds. `origin-fbl` is the first-byte latency between CloudFront and the load balancer; `OriginConnectError` and `OriginCommError` in the result column mean CloudFront itself had trouble reaching the origin:
+
+   ```bash
+   python3 scripts/diagnostics/read_cloudfront_realtime.py "$(terraform output -raw diagnostics_cloudfront_stream)" --minutes 40
+   ```
+
+3. Read the load balancer's side, which lands in S3 every five minutes (so wait a little after the soak). `req` is its wait to reach a target (-1 when it could not connect within its 10-second timeout), `target` is the app:
+
+   ```bash
+   python3 scripts/diagnostics/read_alb_logs.py "$(terraform output -raw diagnostics_bucket)"
+   ```
+
+4. Match them by time. For one stalled request, a long CloudFront `ttfb` with a long `origin-fbl` and a short load balancer `target` time puts the loss between CloudFront and the load balancer or inside the load balancer's connection to the app. A long `req` on the load balancer log puts it on the load balancer's way to the app. A long `ttfb` with a short `origin-fbl` puts it before CloudFront asked the origin.
+
+5. Rejected connection attempts, the test of "the security group is dropping some CloudFront addresses": in the S3 bucket under `flow/`, look for `REJECT` records with destination port 80 and a CloudFront source address. Any of those during a stall is the answer, with the address.
+
+   ```bash
+   aws s3 sync "s3://$(terraform output -raw diagnostics_bucket)/flow/" flow-logs --quiet
+   zcat flow-logs/AWSLogs/*/vpcflowlogs/*/*/*/*/*/*.log.gz | grep REJECT | grep " 80 " | head -50
+   ```
+
+   If the stalls remain unexplained, open a case with AWS (or post on re:Post) with the `x-amz-cf-id` values from the soak: CloudFront can look a request up by that id.
 
 ## Appendix: Windows PowerShell equivalents
 

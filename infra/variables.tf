@@ -92,3 +92,9 @@ variable "alert_email" {
   description = "Email address subscribed to CloudWatch alarm notifications. No default on purpose -- supply via TF_VAR_alert_email or a gitignored terraform.tfvars, the same \"you provide it, never through this code or chat\" rule already used for the external API keys."
   type        = string
 }
+
+variable "enable_diagnostics" {
+  description = "Turn on request-level logging (ALB access logs, a CloudFront real-time log to Kinesis, and a REJECT-only VPC flow log) to find where a slow request loses its time. Off by default; costs a few cents an hour while on. See diagnostics.tf and the runbook's diagnostics appendix."
+  type        = bool
+  default     = false
+}

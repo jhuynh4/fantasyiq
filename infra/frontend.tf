@@ -149,6 +149,9 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress                 = true
     cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+
+    # Per-request timing to the origin (see diagnostics.tf); null leaves real-time logging off.
+    realtime_log_config_arn = var.enable_diagnostics ? aws_cloudfront_realtime_log_config.api[0].arn : null
   }
 
   restrictions {

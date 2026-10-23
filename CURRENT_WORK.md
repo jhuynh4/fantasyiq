@@ -135,7 +135,7 @@ How to reproduce and split a stall: runbook "Appendix: finding where a slow requ
 - The model (v2): see the first bullet under "Product". The old v1 finding (composite 0.31 below its best single factor 0.54) is what led to the rebuild.
 
 **Infra:**
-- **Find the intermittent API stall** (see "AWS session 2"): turn on CloudFront and ALB access logs, then the open-port experiment; 2-4% of API requests stall for 1 s to 2 min and the cause is somewhere between CloudFront and the load balancer.
+- **Find the intermittent API stall** (see "AWS session 2"): `infra/diagnostics.tf` is ready (apply with `"-var=enable_diagnostics=true"`, then follow the runbook's diagnostics appendix, step 5); also read the ALB `TargetConnectionErrorCount` metric, which was missed in session 2 and is the cheapest test of the load balancer's own 10-second connection timeout to the app; 2-4% of API requests stall for 1 s to 2 min and the cause is somewhere between CloudFront and the load balancer.
 - **Confirm the alarm email subscription** (see "AWS session 1"): until it is confirmed, no alarm notifies anyone.
 - App-level Micrometer→CloudWatch bridge (job-failure and circuit-breaker alarms) — needs `micrometer-registry-cloudwatch2` and a new IAM *task* role.
 - Remote Terraform state (it's a local, gitignored file containing secrets; losing it orphans the resources).
@@ -149,7 +149,7 @@ How to reproduce and split a stall: runbook "Appendix: finding where a slow requ
 
 1. **Model follow-ups:** nothing with a measured payoff is left. QB accuracy was investigated and is near its ceiling (see above); the injury and weather shares need history that doesn't exist. If the model is revisited, the open idea is showing uncertainty (a QB's typical single-game range is about +-8 PPR) so the score isn't read as precise.
 2. ~~The small follow-ups (weather text, week picker)~~ done in `phase-9/ui-followups`.
-3. **The next AWS session** (start by turning on CloudFront and ALB access logging, see "AWS session 2"): only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
+3. **The next AWS session** (apply with `"-var=enable_diagnostics=true"` from the start, see the runbook's diagnostics appendix): only when something needs proving on AWS. Do the "Not verified" list first; start the session by confirming the alert email.
 
 Remote branches: all 32 branches from merged PRs (`phase-1` through `phase-8`) still exist on origin — cleanup is deferred, nothing deletes them automatically.
 
