@@ -6,8 +6,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface PlayerGameStatsRepository extends JpaRepository<PlayerGameStats, Long> {
 
@@ -42,4 +44,18 @@ public interface PlayerGameStatsRepository extends JpaRepository<PlayerGameStats
     // position doesn't cost a query per player.
     @Query("select s from PlayerGameStats s join fetch s.player p where s.game.season = :season and p.position = :position")
     List<PlayerGameStats> findBySeasonAndPosition(@Param("season") Integer season, @Param("position") String position);
+
+    /** One game's PPR points for a player: just the numbers, nothing the persistence context has to track. */
+    interface PlayerPoints {
+        UUID getPlayerId();
+
+        BigDecimal getPoints();
+    }
+
+    // For callers that only need each player's points over a whole season (last season's average).
+    // Plain values rather than entities: loading thousands of tracked entities makes every later
+    // query in the same transaction slower, because each one has to check them all for changes.
+    @Query("select s.player.id as playerId, s.fantasyPointsPpr as points from PlayerGameStats s "
+            + "where s.game.season = :season and s.player.position = :position and s.fantasyPointsPpr is not null")
+    List<PlayerPoints> findPointsBySeasonAndPosition(@Param("season") Integer season, @Param("position") String position);
 }

@@ -93,7 +93,7 @@ class TradeAnalysisServiceIT extends IntegrationTestBase {
     }
 
     @Test
-    void onlyTheMostRecentSeasonCounts() {
+    void lastSeasonCountsForAFewExtraGamesNotTheWholeBaseline() {
         Player twoSeasons = wrWithSeason("Two Seasons WR", SEASON - 1, 40.00, 40.00);
         addSeason(twoSeasons, SEASON, 10.00);
         Player other = wrWithSeason("Other WR", SEASON, 10.00);
@@ -101,21 +101,48 @@ class TradeAnalysisServiceIT extends IntegrationTestBase {
         TradeAnalysisResult result = tradeAnalysisService.analyze(
                 List.of(twoSeasons.getId()), List.of(other.getId()));
 
-        assertThat(result.sideA().players().get(0).score()).isEqualByComparingTo("10.00");
+        // 1 game of 10 this season, 2 games of 40 last season counting as 4 * 2 / 17 = 0.47 of a game:
+        // (10 + 0.47 * 40) / 1.47 = 19.60
+        assertThat(result.sideA().players().get(0).score()).isEqualByComparingTo("19.60");
     }
 
     @Test
-    void aPlayerWithNoGamesInTheLatestSeasonHasNoValueNotAnOldOne() {
+    void aPlayerWhoMissedTheLatestSeasonIsValuedFromTheOneBefore() {
         Player lastSeasonOnly = wrWithSeason("Last Season Only WR", SEASON - 1, 25.00);
         Player current = wrWithSeason("Current WR", SEASON, 10.00);
 
         TradeAnalysisResult result = tradeAnalysisService.analyze(
                 List.of(lastSeasonOnly.getId()), List.of(current.getId()));
 
+        PlayerTradeValue value = result.sideA().players().get(0);
+        assertThat(value.score()).isEqualByComparingTo("25.00");
+        assertThat(value.valueAboveReplacement()).isNotNull();
+    }
+
+    @Test
+    void nothingOlderThanLastSeasonCounts() {
+        Player ancient = wrWithSeason("Two Seasons Ago WR", SEASON - 2, 25.00);
+        Player current = wrWithSeason("Current WR", SEASON, 10.00);
+
+        TradeAnalysisResult result = tradeAnalysisService.analyze(
+                List.of(ancient.getId()), List.of(current.getId()));
+
         PlayerTradeValue noValue = result.sideA().players().get(0);
         assertThat(noValue.score()).isNull();
         assertThat(noValue.valueAboveReplacement()).isNull();
         assertThat(result.sideA().totalValue()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void aPlayerWhoMissedTheLatestSeasonStillCountsWhenFindingTheReplacementLevel() {
+        Player current = wrWithSeason("Current WR", SEASON, 20.00);
+        wrWithSeason("Missed A Year WR", SEASON - 1, 8.00);
+
+        TradeAnalysisResult result = tradeAnalysisService.analyze(
+                List.of(current.getId()), List.of(current.getId()));
+
+        // Only two WRs have any value, so the replacement level is the lower one, 8.00.
+        assertThat(result.sideA().players().get(0).replacementLevel()).isEqualByComparingTo("8.00");
     }
 
     @Test

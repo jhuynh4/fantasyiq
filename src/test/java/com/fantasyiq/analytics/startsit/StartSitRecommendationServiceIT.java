@@ -119,7 +119,7 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
 
         assertThat(recommendationsGenerated).isEqualTo(1);
         Recommendation recommendation = recommendationFor(wr);
-        assertThat(recommendation.getScoringVersion()).isEqualTo("v2");
+        assertThat(recommendation.getScoringVersion()).isEqualTo("v2.1");
 
         List<RecommendationFactor> factors = recommendation.getFactors();
         assertThat(factors).extracting(RecommendationFactor::getFactorType)
@@ -175,6 +175,54 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
         assertThat(recommendationFor(starter).getScore()).isEqualByComparingTo("18.00");
         assertThat(recommendationFor(backup).getScore()).isEqualByComparingTo("7.00");
         assertThat(recommendationFor(starter).getScore()).isGreaterThan(recommendationFor(backup).getScore());
+    }
+
+    @Test
+    void aPlayerWithNoGamesYetThisSeasonIsScoredFromLastSeason() {
+        Team ari = team("ARI");
+        Team sf = team("SF");
+        Player veteran = player("Week One Veteran WR", "WR", ari, 30);
+        playedLastSeason(veteran, ari, sf, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14);
+        saveGame("week-one-game", ari, sf, 1, Instant.parse("2099-09-07T17:00:00Z"));
+
+        startSitRecommendationService.computeForWeek(SEASON, 1);
+
+        Recommendation recommendation = recommendationRepository
+                .findByPlayerAndSeasonAndWeekAndType(veteran, SEASON, 1, "START_SIT").orElseThrow();
+        assertThat(recommendation.getScore()).isEqualByComparingTo("14.00");
+        assertThat(contributionOf(recommendation.getFactors(), "BASELINE")).isEqualByComparingTo("14.00");
+        // 17 games last season count as 4 games of evidence
+        assertThat(recommendation.getConfidence()).isEqualTo("MEDIUM");
+    }
+
+    @Test
+    void aRookieWithNoGamesAnywhereStillGetsNoRowInWeekOne() {
+        Team ari = team("ARI");
+        Team sf = team("SF");
+        Player rookie = player("Week One Rookie WR", "WR", ari, 31);
+        saveGame("week-one-game", ari, sf, 1, Instant.parse("2099-09-07T17:00:00Z"));
+
+        startSitRecommendationService.computeForWeek(SEASON, 1);
+
+        assertThat(recommendationRepository.findByPlayerAndSeasonAndWeekAndType(rookie, SEASON, 1, "START_SIT")).isEmpty();
+    }
+
+    @Test
+    void lastSeasonBlendsWithThisSeasonsGamesAndFadesAsTheyPileUp() {
+        Team ari = team("ARI");
+        Team sf = team("SF");
+        Player player = player("Blended WR", "WR", ari, 32);
+        playedLastSeason(player, ari, sf, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10);
+        playedGames(player, ari, sf, 20, 20);
+        saveGame("target-game", ari, sf, 3, Instant.parse("2099-09-07T17:00:00Z"));
+
+        startSitRecommendationService.computeForWeek(SEASON, 3);
+
+        // (2 * 20 + 4 * 10) / (2 + 4) = 13.33, between last season's 10 and this season's 20.
+        Recommendation recommendation = recommendationRepository
+                .findByPlayerAndSeasonAndWeekAndType(player, SEASON, 3, "START_SIT").orElseThrow();
+        assertThat(recommendation.getScore()).isEqualByComparingTo("13.33");
+        assertThat(recommendation.getConfidence()).isEqualTo("HIGH");
     }
 
     @Test
@@ -253,7 +301,7 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
 
         assertThat(recommendationRepository.findByPlayerAndSeasonAndWeekAndType(leftover, SEASON, TARGET_WEEK, "START_SIT"))
                 .isEmpty();
-        assertThat(recommendationFor(current).getScoringVersion()).isEqualTo("v2");
+        assertThat(recommendationFor(current).getScoringVersion()).isEqualTo("v2.1");
         assertThat(recommendationCacheService.getStartSit(SEASON, TARGET_WEEK))
                 .extracting(snapshot -> snapshot.playerName())
                 .containsExactly("Still Scored WR");
@@ -312,6 +360,17 @@ class StartSitRecommendationServiceIT extends IntegrationTestBase {
         for (int week = 1; week <= pprByWeek.length; week++) {
             Game game = saveGame("history-" + player.getFullName() + "-" + week, home, away, week,
                     Instant.parse("2099-0" + week + "-07T17:00:00Z"));
+            BigDecimal ppr = BigDecimal.valueOf(pprByWeek[week - 1]);
+            playerGameStatsRepository.save(new PlayerGameStats(player, game, home,
+                    5, 4, 40, 0, 0, null, null, null, null, null, 0, ppr, ppr));
+        }
+    }
+
+    /** A finished season the year before the one being scored: one game per listed score, in weeks 1..n. */
+    private void playedLastSeason(Player player, Team home, Team away, double... pprByWeek) {
+        for (int week = 1; week <= pprByWeek.length; week++) {
+            Game game = gameRepository.save(new Game("last-season-" + player.getFullName() + "-" + week, SEASON - 1, week,
+                    home, away, Instant.parse("2098-0" + (week % 9 + 1) + "-07T17:00:00Z"), "Test Stadium", "FINAL"));
             BigDecimal ppr = BigDecimal.valueOf(pprByWeek[week - 1]);
             playerGameStatsRepository.save(new PlayerGameStats(player, game, home,
                     5, 4, 40, 0, 0, null, null, null, null, null, 0, ppr, ppr));

@@ -3,9 +3,9 @@ import { ConfidenceBadge } from '../rankings/RankingsTable.tsx'
 import type { StartSitRecommendation } from '../../api/types.ts'
 
 const CONFIDENCE_TEXT = {
-  HIGH: { title: 'Well supported', body: 'The season average rests on six or more games.' },
-  MEDIUM: { title: 'Partly supported', body: 'The season average rests on three to five games.' },
-  LOW: { title: 'Thinly supported', body: 'The season average rests on only one or two games.' },
+  HIGH: { title: 'Well supported', body: 'The average rests on six or more games of evidence, counting last season for up to four.' },
+  MEDIUM: { title: 'Partly supported', body: 'The average rests on three to five games of evidence, counting last season for up to four.' },
+  LOW: { title: 'Thinly supported', body: 'The average rests on only one or two games of evidence.' },
 } as const
 
 export function ScoreContext({

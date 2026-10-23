@@ -30,7 +30,7 @@ export function ConfidenceGuide() {
         What does confidence mean?
       </h2>
       <p className="muted">
-        Confidence describes how many games this season the player&rsquo;s average rests on, not the chance of a
+        Confidence describes how many games of evidence the player&rsquo;s average rests on (this season&rsquo;s, with last season counting for up to four), not the chance of a
         particular performance.
       </p>
       <dl>
@@ -38,19 +38,19 @@ export function ConfidenceGuide() {
           <dt>
             <ConfidenceBadge level="HIGH" />
           </dt>
-          <dd className="muted small">Six or more games this season.</dd>
+          <dd className="muted small">Six or more games of evidence.</dd>
         </div>
         <div>
           <dt>
             <ConfidenceBadge level="MEDIUM" />
           </dt>
-          <dd className="muted small">Three to five games.</dd>
+          <dd className="muted small">Three to five games of evidence.</dd>
         </div>
         <div>
           <dt>
             <ConfidenceBadge level="LOW" />
           </dt>
-          <dd className="muted small">One or two games, or the player is listed out or on injured reserve.</dd>
+          <dd className="muted small">One or two games of evidence, or the player is listed out or on injured reserve.</dd>
         </div>
       </dl>
     </section>
