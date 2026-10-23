@@ -9,34 +9,52 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class VegasImpliedTotalFactorCalculatorTest {
 
+    private static final BigDecimal BASELINE = new BigDecimal("16.00");
+
     @Test
-    void midRangeImpliedTotalProducesProportionalContribution() {
-        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("26.0"));
+    void aHighScoringTeamRaisesTheBaseline() {
+        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("27.0"), BASELINE);
 
         assertThat(result).isPresent();
         assertThat(result.get().factorType()).isEqualTo("VEGAS");
-        // (26 - 17) / (35 - 17) = 0.5 -> 0.5 * 20 = 10.00
-        assertThat(result.get().contribution()).isEqualByComparingTo("10.00");
+        // 27.0 / 22.5 - 1 = +20%; 16.00 * 0.25 * 0.20 = 0.80
+        assertThat(result.get().contribution()).isEqualByComparingTo("0.80");
+        assertThat(result.get().narrative()).contains("27.0").contains("20% above");
     }
 
     @Test
-    void lowImpliedTotalIsClampedToZeroNotNegative() {
-        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("10.0"));
+    void aLowScoringTeamLowersTheBaseline() {
+        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("18.0"), BASELINE);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().contribution()).isEqualByComparingTo("0.00");
+        // 18.0 / 22.5 - 1 = -20%; 16.00 * 0.25 * -0.20 = -0.80
+        assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("-0.80");
+        assertThat(result.get().narrative()).contains("20% below");
     }
 
     @Test
-    void highImpliedTotalIsClampedToMaxWeight() {
-        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("45.0"));
+    void aTypicalTotalChangesNothing() {
+        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("22.5"), BASELINE);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().contribution()).isEqualByComparingTo("20.00");
+        assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void theSwingStaysSmallEvenForAnExtremeTotal() {
+        // 40 points implied is far beyond any real line; the nudge is still under a quarter of the baseline.
+        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("40.0"), BASELINE);
+
+        assertThat(result.orElseThrow().contribution()).isLessThan(BASELINE.multiply(new BigDecimal("0.25")));
+    }
+
+    @Test
+    void aPlayerWithNoPositiveBaselineIsNotAdjusted() {
+        Optional<FactorResult> result = VegasImpliedTotalFactorCalculator.calculate(new BigDecimal("30.0"), BigDecimal.ZERO);
+
+        assertThat(result.orElseThrow().contribution()).isEqualByComparingTo("0.00");
     }
 
     @Test
     void nullImpliedTotalYieldsEmptyOptional() {
-        assertThat(VegasImpliedTotalFactorCalculator.calculate(null)).isEmpty();
+        assertThat(VegasImpliedTotalFactorCalculator.calculate(null, BASELINE)).isEmpty();
     }
 }

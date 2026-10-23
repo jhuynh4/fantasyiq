@@ -13,7 +13,9 @@ public interface DefenseVsPositionStatsRepository extends JpaRepository<DefenseV
 
     // Prior-weeks-only: a recommendation for week W can only use defense
     // performance data from weeks before W, since week W's own defensive
-    // stats don't exist until after that week's games are played.
-    List<DefenseVsPositionStats> findByTeamAndSeasonAndPositionAndWeekLessThanOrderByWeekAsc(
-            Team team, Integer season, String position, Integer week);
+    // stats don't exist until after that week's games are played. Every team's
+    // rows at once: the matchup factor compares one defense with the league
+    // average, and the caller groups them rather than querying per player.
+    List<DefenseVsPositionStats> findBySeasonAndPositionAndWeekLessThan(
+            Integer season, String position, Integer week);
 }

@@ -11,11 +11,10 @@ type Mode = 'login' | 'register'
 const MIN_PASSWORD_LENGTH = 8
 
 const SAMPLE_FACTORS = [
-  { name: 'Recent performance', value: 15.9 },
-  { name: 'Usage trend', value: 8.4 },
-  { name: 'Matchup', value: 6.2 },
-  { name: 'Vegas implied total', value: 5.19 },
-  { name: 'Weather', value: -2.1 },
+  { name: 'Season average', value: 15.9 },
+  { name: 'Matchup', value: 0.8 },
+  { name: 'Vegas implied total', value: 0.52 },
+  { name: 'Weather', value: -1.2 },
 ]
 
 function signed(value: number): string {

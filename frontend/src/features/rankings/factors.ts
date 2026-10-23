@@ -7,7 +7,10 @@ export interface FactorMeta {
 }
 
 // Listed in the order segments are drawn, so a factor sits in the same place on every row.
+// RECENT_PERFORMANCE and USAGE no longer appear in start/sit scores (v2) but still do in trade
+// analysis, so they keep their labels.
 export const FACTOR_META: Record<string, FactorMeta> = {
+  BASELINE: { label: 'Season average', color: 'var(--factor-recent)' },
   RECENT_PERFORMANCE: { label: 'Recent form', color: 'var(--factor-recent)' },
   USAGE: { label: 'Usage trend', color: 'var(--factor-usage)' },
   MATCHUP: { label: 'Matchup', color: 'var(--factor-matchup)' },
@@ -17,6 +20,9 @@ export const FACTOR_META: Record<string, FactorMeta> = {
 }
 
 const FACTOR_ORDER = Object.keys(FACTOR_META)
+
+/** The factors a start/sit score is built from, in legend order. */
+export const START_SIT_FACTORS = ['BASELINE', 'MATCHUP', 'VEGAS', 'WEATHER', 'INJURY']
 
 /** An OUT/IR player's injury penalty is -1000 so nothing can outweigh it; it is not a point value to draw to scale. */
 const INJURY_OVERRIDE_THRESHOLD = -100

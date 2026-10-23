@@ -15,7 +15,7 @@ import java.util.List;
  * GET /recommendations/start-sit isn't: it's a read, not a write whose
  * success/failure needs an audit trail.
  *
- * For each of the five continuous-valued factors, fits a simple linear
+ * For each of the continuous-valued factors, fits a simple linear
  * regression of actual fantasy points against that factor's *current*
  * contribution (see FactorTuningSuggestion for why the resulting slope is
  * directly usable as a weight-rescaling suggestion). INJURY is
@@ -28,7 +28,7 @@ public class WeightTuningService {
 
     private static final String TYPE = "START_SIT";
     private static final List<String> TUNABLE_FACTOR_TYPES =
-            List.of("MATCHUP", "VEGAS", "WEATHER", "USAGE", "RECENT_PERFORMANCE");
+            List.of("BASELINE", "MATCHUP", "VEGAS", "WEATHER");
 
     private final RecommendationRepository recommendationRepository;
     private final RecommendationMatcher recommendationMatcher;
